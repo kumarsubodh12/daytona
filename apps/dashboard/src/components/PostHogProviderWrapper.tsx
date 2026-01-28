@@ -14,7 +14,7 @@ interface PostHogProviderWrapperProps {
 export const PostHogProviderWrapper: FC<PostHogProviderWrapperProps> = ({ children }) => {
   const config = useConfig()
 
-  if (!import.meta.env.PROD || !config.posthog) {
+  if (!config.posthog) {
     return children
   }
 
@@ -28,6 +28,7 @@ export const PostHogProviderWrapper: FC<PostHogProviderWrapperProps> = ({ childr
       apiKey={config.posthog.apiKey}
       options={{
         api_host: config.posthog.host,
+        cookieless_mode: 'on_reject',
         person_profiles: 'always',
         autocapture: false, // ignore default frontend events
         capture_pageview: false, // initial pageview (handled in App.tsx)

@@ -20,26 +20,26 @@ export class RunnerDto {
   @ApiProperty({
     description: 'The domain of the runner',
     example: 'runner1.example.com',
+    required: false,
   })
-  domain: string
+  @IsOptional()
+  domain?: string
 
   @ApiProperty({
     description: 'The API URL of the runner',
     example: 'https://api.runner1.example.com',
+    required: false,
   })
-  apiUrl: string
+  @IsOptional()
+  apiUrl?: string
 
   @ApiProperty({
     description: 'The proxy URL of the runner',
     example: 'https://proxy.runner1.example.com',
+    required: false,
   })
-  proxyUrl: string
-
-  @ApiProperty({
-    description: 'The API key for the runner',
-    example: 'api-key-123',
-  })
-  apiKey: string
+  @IsOptional()
+  proxyUrl?: string
 
   @ApiProperty({
     description: 'The CPU capacity of the runner',
@@ -62,13 +62,17 @@ export class RunnerDto {
   @ApiProperty({
     description: 'The GPU capacity of the runner',
     example: 1,
+    required: false,
   })
-  gpu: number
+  @IsOptional()
+  gpu?: number
 
   @ApiProperty({
     description: 'The type of GPU',
+    required: false,
   })
-  gpuType: string
+  @IsOptional()
+  gpuType?: string
 
   @ApiProperty({
     description: 'The class of the runner',
@@ -122,6 +126,12 @@ export class RunnerDto {
   currentSnapshotCount: number
 
   @ApiPropertyOptional({
+    description: 'Current number of started sandboxes',
+    example: 5,
+  })
+  currentStartedSandboxes: number
+
+  @ApiPropertyOptional({
     description: 'Runner availability score',
     example: 85,
   })
@@ -132,6 +142,12 @@ export class RunnerDto {
     example: 'us',
   })
   region: string
+
+  @ApiProperty({
+    description: 'The name of the runner',
+    example: 'runner1',
+  })
+  name: string
 
   @ApiProperty({
     description: 'The state of the runner',
@@ -169,10 +185,26 @@ export class RunnerDto {
   updatedAt: string
 
   @ApiProperty({
-    description: 'The version of the runner',
+    description: 'The version of the runner (deprecated in favor of apiVersion)',
     example: '0',
+    deprecated: true,
   })
   version: string
+
+  @ApiProperty({
+    description: 'The api version of the runner',
+    example: '0',
+    deprecated: true,
+  })
+  apiVersion: string
+
+  @ApiPropertyOptional({
+    description: 'The app version of the runner',
+    example: 'v0.0.0-dev',
+    deprecated: true,
+  })
+  @IsOptional()
+  appVersion?: string
 
   static fromRunner(runner: Runner): RunnerDto {
     return {
@@ -180,7 +212,6 @@ export class RunnerDto {
       domain: runner.domain,
       apiUrl: runner.apiUrl,
       proxyUrl: runner.proxyUrl,
-      apiKey: runner.apiKey,
       cpu: runner.cpu,
       memory: runner.memoryGiB,
       disk: runner.diskGiB,
@@ -194,14 +225,18 @@ export class RunnerDto {
       currentAllocatedMemoryGiB: runner.currentAllocatedMemoryGiB,
       currentAllocatedDiskGiB: runner.currentAllocatedDiskGiB,
       currentSnapshotCount: runner.currentSnapshotCount,
+      currentStartedSandboxes: runner.currentStartedSandboxes,
       availabilityScore: runner.availabilityScore,
       region: runner.region,
+      name: runner.name,
       state: runner.state,
       lastChecked: runner.lastChecked?.toISOString(),
       unschedulable: runner.unschedulable,
       createdAt: runner.createdAt.toISOString(),
       updatedAt: runner.updatedAt.toISOString(),
-      version: runner.version,
+      version: runner.apiVersion,
+      apiVersion: runner.apiVersion,
+      appVersion: runner.appVersion,
     }
   }
 }

@@ -1,9 +1,9 @@
 // Copyright 2025 Daytona Platforms Inc.
 // SPDX-License-Identifier: AGPL-3.0
 
-//	@title			Daytona Daemon API
+//	@title			Daytona Toolbox API
 //	@version		v0.0.0-dev
-//	@description	Daytona Daemon API
+//	@description	Daytona Toolbox API
 
 package toolbox
 
@@ -42,16 +42,18 @@ import (
 )
 
 type Server struct {
-	WorkDir     string
-	ComputerUse computeruse.IComputerUse
+	WorkDir                              string
+	ComputerUse                          computeruse.IComputerUse
+	TerminationGracePeriodSeconds        int
+	TerminationCheckIntervalMilliseconds int
 }
 
 type WorkDirResponse struct {
-	Dir string `json:"dir"`
+	Dir string `json:"dir" validate:"required"`
 } // @name WorkDirResponse
 
 type UserHomeDirResponse struct {
-	Dir string `json:"dir"`
+	Dir string `json:"dir" validate:"required"`
 } // @name UserHomeDirResponse
 
 // GetWorkDir godoc
@@ -112,8 +114,8 @@ func (s *Server) GetVersion(ctx *gin.Context) {
 }
 
 func (s *Server) Start() error {
-	docs.SwaggerInfo.Description = "Daytona Daemon API"
-	docs.SwaggerInfo.Title = "Daytona Daemon API"
+	docs.SwaggerInfo.Description = "Daytona Toolbox API"
+	docs.SwaggerInfo.Title = "Daytona Toolbox API"
 	docs.SwaggerInfo.BasePath = "/"
 
 	// Set Gin to release mode in production
@@ -124,7 +126,12 @@ func (s *Server) Start() error {
 	r := gin.New()
 	r.Use(common_errors.Recovery())
 	r.Use(middlewares.LoggingMiddleware())
-	r.Use(middlewares.ErrorMiddleware())
+	r.Use(common_errors.NewErrorMiddleware(func(ctx *gin.Context, err error) common_errors.ErrorResponse {
+		return common_errors.ErrorResponse{
+			StatusCode: http.StatusInternalServerError,
+			Message:    err.Error(),
+		}
+	}))
 	binding.Validator = new(DefaultValidator)
 
 	// Add swagger UI in development mode
@@ -178,7 +185,7 @@ func (s *Server) Start() error {
 	{
 		processController.POST("/execute", process.ExecuteCommand)
 
-		sessionController := session.NewSessionController(configDir, s.WorkDir)
+		sessionController := session.NewSessionController(configDir, s.WorkDir, s.TerminationGracePeriodSeconds, s.TerminationCheckIntervalMilliseconds)
 		sessionGroup := processController.Group("/session")
 		{
 			sessionGroup.GET("", sessionController.ListSessions)

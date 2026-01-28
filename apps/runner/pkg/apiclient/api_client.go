@@ -6,7 +6,7 @@ package apiclient
 import (
 	"net/http"
 
-	apiclient "github.com/daytonaio/apiclient"
+	apiclient "github.com/daytonaio/daytona/libs/api-client-go"
 	"github.com/daytonaio/runner/cmd/runner/config"
 )
 
@@ -23,7 +23,7 @@ func GetApiClient() (*apiclient.APIClient, error) {
 
 	var newApiClient *apiclient.APIClient
 
-	serverUrl := c.ServerUrl
+	serverUrl := c.DaytonaApiUrl
 
 	clientConfig := apiclient.NewConfiguration()
 	clientConfig.Servers = apiclient.ServerConfigurations{

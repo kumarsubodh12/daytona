@@ -3,11 +3,17 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { Command, CommandList, CommandGroup, CommandItem, CommandInput, CommandEmpty } from '@/components/ui/command'
-import { cn } from '@/lib/utils'
-import { Check, Loader2 } from 'lucide-react'
-import { X } from 'lucide-react'
+import {
+  Command,
+  CommandCheckboxItem,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandInputButton,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Loader2, X } from 'lucide-react'
 import { FacetedFilterOption } from '../types'
 
 interface RegionFilterProps {
@@ -48,15 +54,9 @@ export function RegionFilterIndicator({ value, onFilterChange, options, isLoadin
 export function RegionFilter({ value, onFilterChange, options, isLoading }: RegionFilterProps) {
   return (
     <Command>
-      <div className="flex items-center gap-2 justify-between p-2">
-        <CommandInput placeholder="Search..." className="border border-border rounded-md h-8" />
-        <button
-          className="text-sm text-muted-foreground hover:text-primary px-2"
-          onClick={() => onFilterChange(undefined)}
-        >
-          Clear
-        </button>
-      </div>
+      <CommandInput placeholder="Search..." className="">
+        <CommandInputButton onClick={() => onFilterChange(undefined)}>Clear</CommandInputButton>
+      </CommandInput>
       <CommandList>
         {isLoading ? (
           <div className="flex items-center justify-center py-6">
@@ -68,7 +68,8 @@ export function RegionFilter({ value, onFilterChange, options, isLoading }: Regi
             <CommandEmpty>No regions found.</CommandEmpty>
             <CommandGroup>
               {options?.map((region) => (
-                <CommandItem
+                <CommandCheckboxItem
+                  checked={value.includes(region.value)}
                   key={region.value}
                   onSelect={() => {
                     const newValue = value.includes(region.value)
@@ -77,20 +78,8 @@ export function RegionFilter({ value, onFilterChange, options, isLoading }: Regi
                     onFilterChange(newValue.length > 0 ? newValue : undefined)
                   }}
                 >
-                  <div className="flex items-center">
-                    <div
-                      className={cn(
-                        'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
-                        value.includes(region.value)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'opacity-50 [&_svg]:invisible',
-                      )}
-                    >
-                      <Check className={cn('h-4 w-4')} />
-                    </div>
-                    {region.label}
-                  </div>
-                </CommandItem>
+                  {region.label}
+                </CommandCheckboxItem>
               ))}
             </CommandGroup>
           </>

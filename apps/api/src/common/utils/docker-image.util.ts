@@ -19,6 +19,36 @@ export interface DockerImageInfo {
   originalName: string
 }
 
+export class DockerImage implements DockerImageInfo {
+  registry?: string
+  project?: string
+  repository: string
+  tag?: string
+  originalName: string
+
+  constructor(info: DockerImageInfo) {
+    this.registry = info.registry
+    this.project = info.project
+    this.repository = info.repository
+    this.tag = info.tag
+    this.originalName = info.originalName
+  }
+
+  getFullName(): string {
+    let name = this.repository
+    if (this.project) {
+      name = `${this.project}/${name}`
+    }
+    if (this.registry) {
+      name = `${this.registry}/${name}`
+    }
+    if (this.tag) {
+      name = `${name}:${this.tag}`
+    }
+    return name
+  }
+}
+
 /**
  * Parses a Docker image name into its component parts
  *
@@ -31,7 +61,7 @@ export interface DockerImageInfo {
  * - ubuntu:20.04 -> { registry: undefined, project: undefined, repository: 'ubuntu', tag: '20.04' }
  * - ubuntu -> { registry: undefined, project: undefined, repository: 'ubuntu', tag: undefined }
  */
-export function parseDockerImage(imageName: string): DockerImageInfo {
+export function parseDockerImage(imageName: string): DockerImage {
   // Handle empty or invalid input
   if (!imageName) {
     throw new Error('Image name cannot be empty')
@@ -86,5 +116,51 @@ export function parseDockerImage(imageName: string): DockerImageInfo {
     result.repository = parts[0]
   }
 
-  return result
+  return new DockerImage(result)
+}
+
+/**
+ * Checks if the Dockerfile content contains any FROM images that may require registry credentials.
+ * This includes:
+ * - Private registry images (e.g., 'myregistry.com/image', 'registry:5000/image')
+ * - Private Docker Hub images (e.g., 'username/my-private-image')
+ *
+ * @param dockerfileContent - The full Dockerfile content as a string
+ * @returns true if any FROM image may require credentials, false otherwise
+ *
+ * Example:
+ * - FROM node:18 -> false (public Docker Hub library image)
+ * - FROM username/my-image:0.0.1 -> true (private Docker Hub image)
+ * - FROM myregistry.com/myimage:latest -> true (private registry)
+ * - FROM registry:5000/test/image -> true (private registry)
+ */
+export function checkDockerfileHasRegistryPrefix(dockerfileContent: string): boolean {
+  const lines = dockerfileContent.split('\n')
+
+  // Regex to match FROM statements
+  const fromRegex = /^\s*FROM\s+(?:--[a-z-]+=[^\s]+\s+)*([^\s]+)(?:\s+AS\s+[^\s]+)?/i
+
+  for (const line of lines) {
+    // Remove inline comments (everything after #)
+    const lineWithoutComment = line.split('#')[0]
+    const trimmedLine = lineWithoutComment.trim()
+
+    // Skip empty lines and comment-only lines
+    if (!trimmedLine) {
+      continue
+    }
+
+    const match = fromRegex.exec(trimmedLine)
+    if (match && match[1]) {
+      const imageName = match[1].trim()
+
+      // Check if image has a path component (contains '/')
+      // This covers both private registries and private Docker Hub images (namespace/image)
+      if (imageName.includes('/')) {
+        return true
+      }
+    }
+  }
+
+  return false
 }

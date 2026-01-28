@@ -27,10 +27,18 @@ type Region struct {
 	Name string `json:"name"`
 	// Organization ID
 	OrganizationId NullableString `json:"organizationId,omitempty"`
+	// The type of the region
+	RegionType RegionType `json:"regionType"`
 	// Creation timestamp
 	CreatedAt string `json:"createdAt"`
 	// Last update timestamp
-	UpdatedAt            string `json:"updatedAt"`
+	UpdatedAt string `json:"updatedAt"`
+	// Proxy URL for the region
+	ProxyUrl NullableString `json:"proxyUrl,omitempty"`
+	// SSH Gateway URL for the region
+	SshGatewayUrl NullableString `json:"sshGatewayUrl,omitempty"`
+	// Snapshot Manager URL for the region
+	SnapshotManagerUrl   NullableString `json:"snapshotManagerUrl,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -40,10 +48,11 @@ type _Region Region
 // This constructor will assign default values to properties that have it defined,
 // and makes sure properties required by API are set, but the set of arguments
 // will change when the set of required properties is changed
-func NewRegion(id string, name string, createdAt string, updatedAt string) *Region {
+func NewRegion(id string, name string, regionType RegionType, createdAt string, updatedAt string) *Region {
 	this := Region{}
 	this.Id = id
 	this.Name = name
+	this.RegionType = regionType
 	this.CreatedAt = createdAt
 	this.UpdatedAt = updatedAt
 	return &this
@@ -148,6 +157,30 @@ func (o *Region) UnsetOrganizationId() {
 	o.OrganizationId.Unset()
 }
 
+// GetRegionType returns the RegionType field value
+func (o *Region) GetRegionType() RegionType {
+	if o == nil {
+		var ret RegionType
+		return ret
+	}
+
+	return o.RegionType
+}
+
+// GetRegionTypeOk returns a tuple with the RegionType field value
+// and a boolean to check if the value has been set.
+func (o *Region) GetRegionTypeOk() (*RegionType, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return &o.RegionType, true
+}
+
+// SetRegionType sets field value
+func (o *Region) SetRegionType(v RegionType) {
+	o.RegionType = v
+}
+
 // GetCreatedAt returns the CreatedAt field value
 func (o *Region) GetCreatedAt() string {
 	if o == nil {
@@ -196,6 +229,135 @@ func (o *Region) SetUpdatedAt(v string) {
 	o.UpdatedAt = v
 }
 
+// GetProxyUrl returns the ProxyUrl field value if set, zero value otherwise (both if not set or set to explicit null).
+func (o *Region) GetProxyUrl() string {
+	if o == nil || IsNil(o.ProxyUrl.Get()) {
+		var ret string
+		return ret
+	}
+	return *o.ProxyUrl.Get()
+}
+
+// GetProxyUrlOk returns a tuple with the ProxyUrl field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
+func (o *Region) GetProxyUrlOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return o.ProxyUrl.Get(), o.ProxyUrl.IsSet()
+}
+
+// HasProxyUrl returns a boolean if a field has been set.
+func (o *Region) HasProxyUrl() bool {
+	if o != nil && o.ProxyUrl.IsSet() {
+		return true
+	}
+
+	return false
+}
+
+// SetProxyUrl gets a reference to the given NullableString and assigns it to the ProxyUrl field.
+func (o *Region) SetProxyUrl(v string) {
+	o.ProxyUrl.Set(&v)
+}
+
+// SetProxyUrlNil sets the value for ProxyUrl to be an explicit nil
+func (o *Region) SetProxyUrlNil() {
+	o.ProxyUrl.Set(nil)
+}
+
+// UnsetProxyUrl ensures that no value is present for ProxyUrl, not even an explicit nil
+func (o *Region) UnsetProxyUrl() {
+	o.ProxyUrl.Unset()
+}
+
+// GetSshGatewayUrl returns the SshGatewayUrl field value if set, zero value otherwise (both if not set or set to explicit null).
+func (o *Region) GetSshGatewayUrl() string {
+	if o == nil || IsNil(o.SshGatewayUrl.Get()) {
+		var ret string
+		return ret
+	}
+	return *o.SshGatewayUrl.Get()
+}
+
+// GetSshGatewayUrlOk returns a tuple with the SshGatewayUrl field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
+func (o *Region) GetSshGatewayUrlOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return o.SshGatewayUrl.Get(), o.SshGatewayUrl.IsSet()
+}
+
+// HasSshGatewayUrl returns a boolean if a field has been set.
+func (o *Region) HasSshGatewayUrl() bool {
+	if o != nil && o.SshGatewayUrl.IsSet() {
+		return true
+	}
+
+	return false
+}
+
+// SetSshGatewayUrl gets a reference to the given NullableString and assigns it to the SshGatewayUrl field.
+func (o *Region) SetSshGatewayUrl(v string) {
+	o.SshGatewayUrl.Set(&v)
+}
+
+// SetSshGatewayUrlNil sets the value for SshGatewayUrl to be an explicit nil
+func (o *Region) SetSshGatewayUrlNil() {
+	o.SshGatewayUrl.Set(nil)
+}
+
+// UnsetSshGatewayUrl ensures that no value is present for SshGatewayUrl, not even an explicit nil
+func (o *Region) UnsetSshGatewayUrl() {
+	o.SshGatewayUrl.Unset()
+}
+
+// GetSnapshotManagerUrl returns the SnapshotManagerUrl field value if set, zero value otherwise (both if not set or set to explicit null).
+func (o *Region) GetSnapshotManagerUrl() string {
+	if o == nil || IsNil(o.SnapshotManagerUrl.Get()) {
+		var ret string
+		return ret
+	}
+	return *o.SnapshotManagerUrl.Get()
+}
+
+// GetSnapshotManagerUrlOk returns a tuple with the SnapshotManagerUrl field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+// NOTE: If the value is an explicit nil, `nil, true` will be returned
+func (o *Region) GetSnapshotManagerUrlOk() (*string, bool) {
+	if o == nil {
+		return nil, false
+	}
+	return o.SnapshotManagerUrl.Get(), o.SnapshotManagerUrl.IsSet()
+}
+
+// HasSnapshotManagerUrl returns a boolean if a field has been set.
+func (o *Region) HasSnapshotManagerUrl() bool {
+	if o != nil && o.SnapshotManagerUrl.IsSet() {
+		return true
+	}
+
+	return false
+}
+
+// SetSnapshotManagerUrl gets a reference to the given NullableString and assigns it to the SnapshotManagerUrl field.
+func (o *Region) SetSnapshotManagerUrl(v string) {
+	o.SnapshotManagerUrl.Set(&v)
+}
+
+// SetSnapshotManagerUrlNil sets the value for SnapshotManagerUrl to be an explicit nil
+func (o *Region) SetSnapshotManagerUrlNil() {
+	o.SnapshotManagerUrl.Set(nil)
+}
+
+// UnsetSnapshotManagerUrl ensures that no value is present for SnapshotManagerUrl, not even an explicit nil
+func (o *Region) UnsetSnapshotManagerUrl() {
+	o.SnapshotManagerUrl.Unset()
+}
+
 func (o Region) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -211,8 +373,18 @@ func (o Region) ToMap() (map[string]interface{}, error) {
 	if o.OrganizationId.IsSet() {
 		toSerialize["organizationId"] = o.OrganizationId.Get()
 	}
+	toSerialize["regionType"] = o.RegionType
 	toSerialize["createdAt"] = o.CreatedAt
 	toSerialize["updatedAt"] = o.UpdatedAt
+	if o.ProxyUrl.IsSet() {
+		toSerialize["proxyUrl"] = o.ProxyUrl.Get()
+	}
+	if o.SshGatewayUrl.IsSet() {
+		toSerialize["sshGatewayUrl"] = o.SshGatewayUrl.Get()
+	}
+	if o.SnapshotManagerUrl.IsSet() {
+		toSerialize["snapshotManagerUrl"] = o.SnapshotManagerUrl.Get()
+	}
 
 	for key, value := range o.AdditionalProperties {
 		toSerialize[key] = value
@@ -228,6 +400,7 @@ func (o *Region) UnmarshalJSON(data []byte) (err error) {
 	requiredProperties := []string{
 		"id",
 		"name",
+		"regionType",
 		"createdAt",
 		"updatedAt",
 	}
@@ -262,8 +435,12 @@ func (o *Region) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "id")
 		delete(additionalProperties, "name")
 		delete(additionalProperties, "organizationId")
+		delete(additionalProperties, "regionType")
 		delete(additionalProperties, "createdAt")
 		delete(additionalProperties, "updatedAt")
+		delete(additionalProperties, "proxyUrl")
+		delete(additionalProperties, "sshGatewayUrl")
+		delete(additionalProperties, "snapshotManagerUrl")
 		o.AdditionalProperties = additionalProperties
 	}
 

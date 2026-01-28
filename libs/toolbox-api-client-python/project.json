@@ -6,9 +6,17 @@
   "targets": {
     "generate:api-client": {
       "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/apps/daemon/pkg/toolbox/docs/swagger.json",
+        "{workspaceRoot}/hack/python-client/openapi-templates/**/*",
+        "{workspaceRoot}/hack/python-client/postprocess.sh"
+      ],
+      "outputs": ["{projectRoot}/daytona_toolbox_api_client"],
       "options": {
         "commands": [
-          "yarn run openapi-generator-cli generate --git-repo-id=daytona --git-user-id=daytonaio -i apps/daemon/pkg/toolbox/docs/swagger.json -g python --additional-properties=packageName=daytona_toolbox_api_client,projectName=daytona_toolbox_api_client,packageVersion=$DEFAULT_PACKAGE_VERSION,pythonPackageName=daytona_toolbox_api_client,disallowAdditionalPropertiesIfNotPresent=false -o {projectRoot}",
+          "rm -rf {projectRoot}/daytona_toolbox_api_client",
+          "yarn run openapi-generator-cli generate --git-repo-id=daytona --git-user-id=daytonaio -i apps/daemon/pkg/toolbox/docs/swagger.json -g python -t hack/python-client/openapi-templates --additional-properties=packageName=daytona_toolbox_api_client,projectName=daytona_toolbox_api_client,packageVersion=$DEFAULT_PACKAGE_VERSION,pythonPackageName=daytona_toolbox_api_client,disallowAdditionalPropertiesIfNotPresent=false -o {projectRoot}",
           "bash hack/python-client/postprocess.sh {projectRoot}"
         ],
         "parallel": false
@@ -20,17 +28,10 @@
         }
       ]
     },
+    "deps-check": {},
+    "build-py-lib": {},
     "build": {
-      "executor": "nx:run-commands",
-      "options": {
-        "cwd": "{projectRoot}",
-        "commands": [
-          "rm -rf dist",
-          "if [ -n \"$PYPI_PKG_VERSION\" ] || [ -n \"$DEFAULT_PACKAGE_VERSION\" ]; then VER=${PYPI_PKG_VERSION:-$DEFAULT_PACKAGE_VERSION}; sed -i \"s/^VERSION = \\\".*\\\"$/VERSION = \\\"$VER\\\"/\" setup.py && poetry version \"$VER\"; fi && poetry build"
-        ],
-        "parallel": false,
-        "dependsOn": ["deps-check"]
-      }
+      "dependsOn": ["build-py-lib"]
     },
     "publish": {
       "executor": "nx:run-commands",
@@ -43,13 +44,6 @@
         "parallel": false
       },
       "dependsOn": ["build"]
-    },
-    "deps-check": {
-      "executor": "nx:run-commands",
-      "options": {
-        "cwd": "{projectRoot}",
-        "commands": ["poetry run deptry .", "poetry lock --regenerate"]
-      }
     }
   },
   "tags": []

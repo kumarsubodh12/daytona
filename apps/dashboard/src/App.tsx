@@ -13,10 +13,12 @@ import { OrganizationsProvider } from '@/providers/OrganizationsProvider'
 import { SelectedOrganizationProvider } from '@/providers/SelectedOrganizationProvider'
 import { UserOrganizationInvitationsProvider } from '@/providers/UserOrganizationInvitationsProvider'
 import { OrganizationRolePermissionsEnum, OrganizationUserRoleEnum } from '@daytonaio/api-client'
-import { usePostHog } from 'posthog-js/react'
+import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
 import React, { Suspense, useEffect } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BannerProvider } from './components/Banner'
+import { CommandPaletteProvider, useIsCommandPaletteEnabled } from './components/CommandPalette'
 import LoadingFallback from './components/LoadingFallback'
 import { Button } from './components/ui/button'
 import {
@@ -28,6 +30,7 @@ import {
   DialogTitle,
 } from './components/ui/dialog'
 import { DAYTONA_DOCS_URL, DAYTONA_SLACK_URL } from './constants/ExternalLinks'
+import { FeatureFlags } from './enums/FeatureFlags'
 import { RoutePath, getRouteSubPath } from './enums/RoutePath'
 import { useConfig } from './hooks/useConfig'
 import { addPylonWidget } from './lib/pylon-widget'
@@ -40,7 +43,9 @@ import LandingPage from './pages/LandingPage'
 import Limits from './pages/Limits'
 import Logout from './pages/Logout'
 import NotFound from './pages/NotFound'
+import Regions from './pages/Regions'
 import Registries from './pages/Registries'
+import Runners from './pages/Runners'
 import Sandboxes from './pages/Sandboxes'
 import Snapshots from './pages/Snapshots'
 import Spending from './pages/Spending'
@@ -73,7 +78,7 @@ function App() {
   const { error: authError, isAuthenticated, user, signoutRedirect } = useAuth()
 
   useEffect(() => {
-    if (import.meta.env.PROD && isAuthenticated && user && posthog?.get_distinct_id() !== user.profile.sub) {
+    if (isAuthenticated && user && posthog?.get_distinct_id() !== user.profile.sub) {
       posthog?.identify(user.profile.sub, {
         email: user.profile.email,
         name: user.profile.name,
@@ -101,6 +106,8 @@ function App() {
       })
     }
   }, [location, posthog])
+
+  const cmdkEnabled = useIsCommandPaletteEnabled()
 
   if (authError) {
     return (
@@ -134,7 +141,11 @@ function App() {
                   <RegionsProvider>
                     <UserOrganizationInvitationsProvider>
                       <NotificationSocketProvider>
-                        <Dashboard />
+                        <CommandPaletteProvider enableGlobalShortcut={cmdkEnabled}>
+                          <BannerProvider>
+                            <Dashboard />
+                          </BannerProvider>
+                        </CommandPaletteProvider>
                       </NotificationSocketProvider>
                     </UserOrganizationInvitationsProvider>
                   </RegionsProvider>
@@ -221,6 +232,26 @@ function App() {
         />
         <Route path={getRouteSubPath(RoutePath.SETTINGS)} element={<OrganizationSettings />} />
         <Route
+          path={getRouteSubPath(RoutePath.REGIONS)}
+          element={
+            <RequiredFeatureFlagWrapper flagKey={FeatureFlags.ORGANIZATION_INFRASTRUCTURE}>
+              <Regions />
+            </RequiredFeatureFlagWrapper>
+          }
+        />
+        <Route
+          path={getRouteSubPath(RoutePath.RUNNERS)}
+          element={
+            <RequiredFeatureFlagWrapper flagKey={FeatureFlags.ORGANIZATION_INFRASTRUCTURE}>
+              <RequiredPermissionsOrganizationPageWrapper
+                requiredPermissions={[OrganizationRolePermissionsEnum.READ_RUNNERS]}
+              >
+                <Runners />
+              </RequiredPermissionsOrganizationPageWrapper>
+            </RequiredFeatureFlagWrapper>
+          }
+        />
+        <Route
           path={getRouteSubPath(RoutePath.ACCOUNT_SETTINGS)}
           element={<AccountSettings linkedAccountsEnabled={config.linkedAccountsEnabled} />}
         />
@@ -262,6 +293,16 @@ function RequiredPermissionsOrganizationPageWrapper({
   const { authenticatedUserHasPermission } = useSelectedOrganization()
 
   if (!requiredPermissions.every((permission) => authenticatedUserHasPermission(permission))) {
+    return <Navigate to={RoutePath.DASHBOARD} replace />
+  }
+
+  return children
+}
+
+function RequiredFeatureFlagWrapper({ children, flagKey }: { children: React.ReactNode; flagKey: FeatureFlags }) {
+  const flagEnabled = useFeatureFlagEnabled(flagKey)
+
+  if (!flagEnabled) {
     return <Navigate to={RoutePath.DASHBOARD} replace />
   }
 

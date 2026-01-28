@@ -127,4 +127,22 @@ export interface SnapshotDto {
    * @memberof SnapshotDto
    */
   buildInfo?: BuildInfo
+  /**
+   * IDs of regions where the snapshot is available
+   * @type {Array<string>}
+   * @memberof SnapshotDto
+   */
+  regionIds?: Array<string>
+  /**
+   * The initial runner ID of the snapshot
+   * @type {string}
+   * @memberof SnapshotDto
+   */
+  initialRunnerId?: string
+  /**
+   * The snapshot reference
+   * @type {string}
+   * @memberof SnapshotDto
+   */
+  ref?: string
 }

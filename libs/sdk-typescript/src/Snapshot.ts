@@ -60,12 +60,14 @@ export interface PaginatedSnapshots extends Omit<PaginatedSnapshotsDto, 'items'>
  * If an Image instance is provided, it will be used to create a new image in Daytona.
  * @property {Resources} resources - Resources of the snapshot.
  * @property {string[]} entrypoint - Entrypoint of the snapshot.
+ * @property {string} regionId - ID of the region where the snapshot will be available. Defaults to organization default region if not specified.
  */
 export type CreateSnapshotParams = {
   name: string
   image: string | Image
   resources?: Resources
   entrypoint?: string[]
+  regionId?: string
 }
 
 /**
@@ -78,6 +80,7 @@ export class SnapshotService {
     private clientConfig: Configuration,
     private snapshotsApi: SnapshotsApi,
     private objectStorageApi: ObjectStorageApi,
+    private defaultRegionId?: string,
   ) {}
 
   /**
@@ -178,6 +181,8 @@ export class SnapshotService {
       createSnapshotReq.disk = params.resources.disk
     }
 
+    createSnapshotReq.regionId = params.regionId || this.defaultRegionId
+
     let createdSnapshot = (
       await this.snapshotsApi.createSnapshot(createSnapshotReq, undefined, {
         timeout: (options.timeout || 0) * 1000,
@@ -194,7 +199,9 @@ export class SnapshotService {
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     const startLogStreaming = async (onChunk: (chunk: string) => void = () => {}) => {
       if (!streamPromise) {
-        const url = `${this.clientConfig.basePath}/snapshots/${createdSnapshot.id}/build-logs?follow=true`
+        const response = await this.snapshotsApi.getSnapshotBuildLogsUrl(createdSnapshot.id)
+
+        const url = `${response.data.url}?follow=true`
 
         streamPromise = processStreamingResponse(
           () => fetch(url, { method: 'GET', headers: this.clientConfig.baseOptions.headers }),
@@ -207,7 +214,11 @@ export class SnapshotService {
     if (options.onLogs) {
       options.onLogs(`Creating snapshot ${createdSnapshot.name} (${createdSnapshot.state})`)
 
-      if (createdSnapshot.state !== SnapshotState.PENDING) {
+      if (
+        createSnapshotReq.buildInfo &&
+        createdSnapshot.state !== SnapshotState.PENDING &&
+        !terminalStates.includes(createdSnapshot.state)
+      ) {
         await startLogStreaming(options.onLogs)
       }
     }
@@ -215,7 +226,7 @@ export class SnapshotService {
     let previousState = createdSnapshot.state
     while (!terminalStates.includes(createdSnapshot.state)) {
       if (options.onLogs && previousState !== createdSnapshot.state) {
-        if (createdSnapshot.state !== SnapshotState.PENDING && !streamPromise) {
+        if (createSnapshotReq.buildInfo && createdSnapshot.state !== SnapshotState.PENDING && !streamPromise) {
           await startLogStreaming(options.onLogs)
         }
         options.onLogs(`Creating snapshot ${createdSnapshot.name} (${createdSnapshot.state})`)

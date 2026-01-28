@@ -13,12 +13,13 @@ import {
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository, Not, In, Raw, ILike, FindOptionsWhere } from 'typeorm'
+import { v4 as uuidv4 } from 'uuid'
 import { Snapshot } from '../entities/snapshot.entity'
 import { SnapshotState } from '../enums/snapshot-state.enum'
 import { CreateSnapshotDto } from '../dto/create-snapshot.dto'
 import { BuildInfo } from '../entities/build-info.entity'
 import { generateBuildInfoHash as generateBuildSnapshotRef } from '../entities/build-info.entity'
-import { OnEvent } from '@nestjs/event-emitter'
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter'
 import { SandboxEvents } from '../constants/sandbox-events.constants'
 import { SandboxCreatedEvent } from '../events/sandbox-create.event'
 import { Organization } from '../../organization/entities/organization.entity'
@@ -34,11 +35,20 @@ import { OrganizationUsageService } from '../../organization/services/organizati
 import { RedisLockProvider } from '../common/redis-lock.provider'
 import { SnapshotSortDirection, SnapshotSortField } from '../dto/list-snapshots-query.dto'
 import { PER_SANDBOX_LIMIT_MESSAGE } from '../../common/constants/error-messages'
-import { DockerRegistryService, ImageDetails } from '../../docker-registry/services/docker-registry.service'
+import { DockerRegistryService } from '../../docker-registry/services/docker-registry.service'
 import { DefaultRegionRequiredException } from '../../organization/exceptions/DefaultRegionRequiredException'
 import { Region } from '../../region/entities/region.entity'
-import { Runner } from '../entities/runner.entity'
 import { RunnerState } from '../enums/runner-state.enum'
+import { OnAsyncEvent } from '../../common/decorators/on-async-event.decorator'
+import { RunnerEvents } from '../constants/runner-events'
+import { RunnerDeletedEvent } from '../events/runner-deleted.event'
+import { SnapshotRegion } from '../entities/snapshot-region.entity'
+import { RegionType } from '../../region/enums/region-type.enum'
+import { SnapshotEvents } from '../constants/snapshot-events'
+import { SnapshotCreatedEvent } from '../events/snapshot-created.event'
+import { RunnerService } from './runner.service'
+import { RegionService } from '../../region/services/region.service'
+import { TypedConfigService } from '../../config/typed-config.service'
 
 const IMAGE_NAME_REGEX = /^[a-zA-Z0-9_.\-:]+(\/[a-zA-Z0-9_.\-:]+)*(@sha256:[a-f0-9]{64})?$/
 @Injectable()
@@ -56,12 +66,16 @@ export class SnapshotService {
     private readonly snapshotRunnerRepository: Repository<SnapshotRunner>,
     @InjectRepository(Region)
     private readonly regionRepository: Repository<Region>,
-    @InjectRepository(Runner)
-    private readonly runnerRepository: Repository<Runner>,
+    @InjectRepository(SnapshotRegion)
+    private readonly snapshotRegionRepository: Repository<SnapshotRegion>,
     private readonly organizationService: OrganizationService,
     private readonly organizationUsageService: OrganizationUsageService,
     private readonly redisLockProvider: RedisLockProvider,
+    private readonly runnerService: RunnerService,
+    private readonly regionService: RegionService,
     private readonly dockerRegistryService: DockerRegistryService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly configService: TypedConfigService,
   ) {}
 
   private validateImageName(name: string): string | null {
@@ -126,6 +140,8 @@ export class SnapshotService {
       throw new DefaultRegionRequiredException()
     }
 
+    const regionId = await this.getValidatedOrDefaultRegionId(organization, createSnapshotDto.regionId)
+
     let pendingSnapshotCountIncrement: number | undefined
 
     if (!createSnapshotDto.imageName) {
@@ -133,9 +149,9 @@ export class SnapshotService {
     }
 
     try {
-      let entrypoint = createSnapshotDto.entrypoint
-      let ref: string | undefined = undefined
-      let state: SnapshotState = SnapshotState.PENDING
+      const entrypoint = createSnapshotDto.entrypoint
+      const ref: string | undefined = undefined
+      const state: SnapshotState = SnapshotState.PENDING
 
       const nameValidationError = this.validateSnapshotName(createSnapshotDto.name)
       if (nameValidationError) {
@@ -163,45 +179,11 @@ export class SnapshotService {
         pendingSnapshotCountIncrement = newSnapshotCount
       }
 
-      let imageDetails: ImageDetails | undefined = undefined
-
       try {
-        imageDetails = await this.dockerRegistryService.getImageDetails(createSnapshotDto.imageName, organization.id)
-      } catch (error) {
-        this.logger.warn(`Could not get image details for ${createSnapshotDto.imageName}: ${error}`)
-      }
+        const snapshotId = uuidv4()
 
-      if (imageDetails) {
-        if (imageDetails?.sizeGB > organization.maxSnapshotSize) {
-          throw new ForbiddenException(
-            `Image size ${imageDetails.sizeGB} exceeds the maximum allowed snapshot size (${organization.maxSnapshotSize})`,
-          )
-        }
-
-        if ((!entrypoint || entrypoint.length === 0) && imageDetails) {
-          if (imageDetails.entrypoint && imageDetails.entrypoint.length > 0) {
-            entrypoint = imageDetails.entrypoint
-          } else {
-            entrypoint = ['sleep', 'infinity']
-          }
-        }
-
-        const defaultInternalRegistry = await this.dockerRegistryService.getDefaultInternalRegistry()
-        const hash =
-          imageDetails.digest && imageDetails.digest.startsWith('sha256:')
-            ? imageDetails.digest.substring('sha256:'.length)
-            : imageDetails.digest
-        ref = `${defaultInternalRegistry.url.replace(/^https?:\/\//, '')}/${defaultInternalRegistry.project}/daytona-${hash}:daytona`
-
-        const exists = await this.readySnapshotRunnerExists(ref, organization.defaultRegionId)
-
-        if (exists) {
-          state = SnapshotState.ACTIVE
-        }
-      }
-
-      try {
         const snapshot = this.snapshotRepository.create({
+          id: snapshotId,
           organizationId: organization.id,
           ...createSnapshotDto,
           entrypoint: this.processEntrypoint(entrypoint),
@@ -209,9 +191,14 @@ export class SnapshotService {
           state,
           ref,
           general,
+          snapshotRegions: [{ snapshotId, regionId }],
         })
 
-        return await this.snapshotRepository.save(snapshot)
+        const savedSnapshot = await this.snapshotRepository.save(snapshot)
+
+        this.eventEmitter.emit(SnapshotEvents.CREATED, new SnapshotCreatedEvent(savedSnapshot))
+
+        return savedSnapshot
       } catch (error) {
         if (error.code === '23505') {
           // PostgreSQL unique violation error code
@@ -231,6 +218,8 @@ export class SnapshotService {
     if (!organization.defaultRegionId) {
       throw new DefaultRegionRequiredException()
     }
+
+    const regionId = await this.getValidatedOrDefaultRegionId(organization, createSnapshotDto.regionId)
 
     let pendingSnapshotCountIncrement: number | undefined
     let entrypoint: string[] | undefined = undefined
@@ -259,13 +248,17 @@ export class SnapshotService {
 
       entrypoint = this.getEntrypointFromDockerfile(createSnapshotDto.buildInfo.dockerfileContent)
 
+      const snapshotId = uuidv4()
+
       const snapshot = this.snapshotRepository.create({
+        id: snapshotId,
         organizationId: organization.id,
         ...createSnapshotDto,
         entrypoint: this.processEntrypoint(entrypoint),
         mem: createSnapshotDto.memory, // Map memory to mem
         state: SnapshotState.PENDING,
         general,
+        snapshotRegions: [{ snapshotId, regionId }],
       })
 
       const buildSnapshotRef = generateBuildSnapshotRef(
@@ -293,17 +286,24 @@ export class SnapshotService {
         snapshot.buildInfo = buildInfoEntity
       }
 
-      const defaultInternalRegistry = await this.dockerRegistryService.getDefaultInternalRegistry()
-      snapshot.ref = `${defaultInternalRegistry.url.replace(/^(https?:\/\/)/, '')}/${defaultInternalRegistry.project}/${buildSnapshotRef}`
+      const internalRegistry = await this.dockerRegistryService.getAvailableInternalRegistry(regionId)
+      if (!internalRegistry) {
+        throw new Error('No internal registry found for snapshot')
+      }
+      snapshot.ref = `${internalRegistry.url.replace(/^(https?:\/\/)/, '')}/${internalRegistry.project || 'daytona'}/${buildSnapshotRef}`
 
-      const exists = await this.readySnapshotRunnerExists(snapshot.ref, organization.defaultRegionId)
+      const exists = await this.readySnapshotRunnerExists(snapshot.ref, regionId)
 
       if (exists) {
         snapshot.state = SnapshotState.ACTIVE
       }
 
       try {
-        return await this.snapshotRepository.save(snapshot)
+        const savedSnapshot = await this.snapshotRepository.save(snapshot)
+
+        this.eventEmitter.emit(SnapshotEvents.CREATED, new SnapshotCreatedEvent(savedSnapshot))
+
+        return savedSnapshot
       } catch (error) {
         if (error.code === '23505') {
           // PostgreSQL unique violation error code
@@ -366,6 +366,7 @@ export class SnapshotService {
 
     const [items, total] = await this.snapshotRepository.findAndCount({
       where,
+      relations: ['snapshotRegions'],
       order: {
         general: 'ASC', // Sort general snapshots last
         [sortField]: {
@@ -429,6 +430,29 @@ export class SnapshotService {
 
     snapshot.general = general
     return await this.snapshotRepository.save(snapshot)
+  }
+
+  async getBuildLogsUrl(snapshot: Snapshot): Promise<string> {
+    if (!snapshot.initialRunnerId) {
+      throw new NotFoundException(`Snapshot ${snapshot.id} has no initial runner`)
+    }
+
+    const runner = await this.runnerService.findOne(snapshot.initialRunnerId)
+    if (!runner) {
+      throw new NotFoundException(`Initial runner for snapshot ${snapshot.id} not found`)
+    }
+
+    const region = await this.regionService.findOne(runner.region, true)
+
+    if (!region) {
+      throw new NotFoundException(`Region for initial runner for snapshot ${snapshot.id} not found`)
+    }
+
+    if (!region.proxyUrl) {
+      return `${this.configService.getOrThrow('proxy.protocol')}://${this.configService.getOrThrow('proxy.domain')}/snapshots/${snapshot.id}/build-logs`
+    }
+
+    return region.proxyUrl + '/snapshots/' + snapshot.id + '/build-logs'
   }
 
   private async validateOrganizationQuotas(
@@ -647,24 +671,65 @@ export class SnapshotService {
   }
 
   /**
-   * Get all regions for snapshot propagation for an organization.
+   * Validates and returns a region ID for snapshot availability.
    *
-   * Regions are considered for snapshot propagation if:
-   * - they are organization regions
-   * - they are shared regions with quotas allocated for the organization
-   *
-   * @param organizationId - The ID of the organization.
-   * @returns The regions for snapshot propagation.
+   * @param organization - The organization which is creating the snapshot.
+   * @param regionId - The requested region ID. If omitted, the organization's default region is used.
+   * @returns The validated region ID
+   * @throws {NotFoundException} If the requested region is not available to the organization
    */
-  async getRegionsForSnapshotPropagation(organizationId: string): Promise<Region[]> {
+  private async getValidatedOrDefaultRegionId(organization: Organization, regionId?: string): Promise<string> {
+    if (!regionId) {
+      return organization.defaultRegionId
+    }
+
+    const region = await this.regionRepository.findOne({
+      where: { id: regionId },
+    })
+
+    if (!region) {
+      throw new NotFoundException('Region not found')
+    }
+
+    const availableRegions = await this.organizationService.listAvailableRegions(organization.id)
+
+    if (!availableRegions.some((r) => r.id === regionId)) {
+      if (region.regionType === RegionType.SHARED) {
+        // region is public, but the organization does not have a quota for it
+        throw new ForbiddenException(`Region ${regionId} is not available to the organization`)
+      } else {
+        // region is not public, respond as if the region was not found
+        throw new NotFoundException('Region not found')
+      }
+    }
+
+    return regionId
+  }
+
+  /**
+   * @param snapshotId
+   * @returns The regions where the snapshot is configured to be propagated to.
+   */
+  async getSnapshotRegions(snapshotId: string): Promise<Region[]> {
     return await this.regionRepository
-      .createQueryBuilder('region')
-      .where('region."organizationId" = :organizationId', { organizationId })
-      .orWhere(
-        'region."organizationId" IS NULL AND EXISTS (SELECT 1 FROM region_quota rq WHERE rq."regionId" = region."id" AND rq."organizationId" = :organizationId)',
-        { organizationId },
-      )
+      .createQueryBuilder('r')
+      .innerJoin('snapshot_region', 'sr', 'sr."regionId" = r.id')
+      .where('sr."snapshotId" = :snapshotId', { snapshotId })
       .getMany()
+  }
+
+  /**
+   * @param snapshotId - The ID of the snapshot.
+   * @param regionId - The ID of the region.
+   * @returns true if the snapshot is available in the region, false otherwise.
+   */
+  async isAvailableInRegion(snapshotId: string, regionId: string): Promise<boolean> {
+    return await this.snapshotRegionRepository.exists({
+      where: {
+        snapshotId,
+        regionId,
+      },
+    })
   }
 
   @OnEvent(OrganizationEvents.SUSPENDED_SNAPSHOT_DEACTIVATED)
@@ -676,5 +741,16 @@ export class SnapshotService {
         error,
       )
     })
+  }
+
+  @OnAsyncEvent({
+    event: RunnerEvents.DELETED,
+  })
+  async handleRunnerDeletedEvent(payload: RunnerDeletedEvent): Promise<void> {
+    await payload.entityManager.update(
+      SnapshotRunner,
+      { runnerId: payload.runnerId },
+      { state: SnapshotRunnerState.REMOVING },
+    )
   }
 }

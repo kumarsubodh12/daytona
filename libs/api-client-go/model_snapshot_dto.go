@@ -39,7 +39,13 @@ type SnapshotDto struct {
 	UpdatedAt      time.Time       `json:"updatedAt"`
 	LastUsedAt     NullableTime    `json:"lastUsedAt"`
 	// Build information for the snapshot
-	BuildInfo            *BuildInfo `json:"buildInfo,omitempty"`
+	BuildInfo *BuildInfo `json:"buildInfo,omitempty"`
+	// IDs of regions where the snapshot is available
+	RegionIds []string `json:"regionIds,omitempty"`
+	// The initial runner ID of the snapshot
+	InitialRunnerId *string `json:"initialRunnerId,omitempty"`
+	// The snapshot reference
+	Ref                  *string `json:"ref,omitempty"`
 	AdditionalProperties map[string]interface{}
 }
 
@@ -516,6 +522,102 @@ func (o *SnapshotDto) SetBuildInfo(v BuildInfo) {
 	o.BuildInfo = &v
 }
 
+// GetRegionIds returns the RegionIds field value if set, zero value otherwise.
+func (o *SnapshotDto) GetRegionIds() []string {
+	if o == nil || IsNil(o.RegionIds) {
+		var ret []string
+		return ret
+	}
+	return o.RegionIds
+}
+
+// GetRegionIdsOk returns a tuple with the RegionIds field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SnapshotDto) GetRegionIdsOk() ([]string, bool) {
+	if o == nil || IsNil(o.RegionIds) {
+		return nil, false
+	}
+	return o.RegionIds, true
+}
+
+// HasRegionIds returns a boolean if a field has been set.
+func (o *SnapshotDto) HasRegionIds() bool {
+	if o != nil && !IsNil(o.RegionIds) {
+		return true
+	}
+
+	return false
+}
+
+// SetRegionIds gets a reference to the given []string and assigns it to the RegionIds field.
+func (o *SnapshotDto) SetRegionIds(v []string) {
+	o.RegionIds = v
+}
+
+// GetInitialRunnerId returns the InitialRunnerId field value if set, zero value otherwise.
+func (o *SnapshotDto) GetInitialRunnerId() string {
+	if o == nil || IsNil(o.InitialRunnerId) {
+		var ret string
+		return ret
+	}
+	return *o.InitialRunnerId
+}
+
+// GetInitialRunnerIdOk returns a tuple with the InitialRunnerId field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SnapshotDto) GetInitialRunnerIdOk() (*string, bool) {
+	if o == nil || IsNil(o.InitialRunnerId) {
+		return nil, false
+	}
+	return o.InitialRunnerId, true
+}
+
+// HasInitialRunnerId returns a boolean if a field has been set.
+func (o *SnapshotDto) HasInitialRunnerId() bool {
+	if o != nil && !IsNil(o.InitialRunnerId) {
+		return true
+	}
+
+	return false
+}
+
+// SetInitialRunnerId gets a reference to the given string and assigns it to the InitialRunnerId field.
+func (o *SnapshotDto) SetInitialRunnerId(v string) {
+	o.InitialRunnerId = &v
+}
+
+// GetRef returns the Ref field value if set, zero value otherwise.
+func (o *SnapshotDto) GetRef() string {
+	if o == nil || IsNil(o.Ref) {
+		var ret string
+		return ret
+	}
+	return *o.Ref
+}
+
+// GetRefOk returns a tuple with the Ref field value if set, nil otherwise
+// and a boolean to check if the value has been set.
+func (o *SnapshotDto) GetRefOk() (*string, bool) {
+	if o == nil || IsNil(o.Ref) {
+		return nil, false
+	}
+	return o.Ref, true
+}
+
+// HasRef returns a boolean if a field has been set.
+func (o *SnapshotDto) HasRef() bool {
+	if o != nil && !IsNil(o.Ref) {
+		return true
+	}
+
+	return false
+}
+
+// SetRef gets a reference to the given string and assigns it to the Ref field.
+func (o *SnapshotDto) SetRef(v string) {
+	o.Ref = &v
+}
+
 func (o SnapshotDto) MarshalJSON() ([]byte, error) {
 	toSerialize, err := o.ToMap()
 	if err != nil {
@@ -550,6 +652,15 @@ func (o SnapshotDto) ToMap() (map[string]interface{}, error) {
 	toSerialize["lastUsedAt"] = o.LastUsedAt.Get()
 	if !IsNil(o.BuildInfo) {
 		toSerialize["buildInfo"] = o.BuildInfo
+	}
+	if !IsNil(o.RegionIds) {
+		toSerialize["regionIds"] = o.RegionIds
+	}
+	if !IsNil(o.InitialRunnerId) {
+		toSerialize["initialRunnerId"] = o.InitialRunnerId
+	}
+	if !IsNil(o.Ref) {
+		toSerialize["ref"] = o.Ref
 	}
 
 	for key, value := range o.AdditionalProperties {
@@ -624,6 +735,9 @@ func (o *SnapshotDto) UnmarshalJSON(data []byte) (err error) {
 		delete(additionalProperties, "updatedAt")
 		delete(additionalProperties, "lastUsedAt")
 		delete(additionalProperties, "buildInfo")
+		delete(additionalProperties, "regionIds")
+		delete(additionalProperties, "initialRunnerId")
+		delete(additionalProperties, "ref")
 		o.AdditionalProperties = additionalProperties
 	}
 

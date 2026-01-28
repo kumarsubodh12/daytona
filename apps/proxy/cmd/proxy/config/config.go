@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daytonaio/apiclient"
 	"github.com/daytonaio/common-go/pkg/utils"
+	apiclient "github.com/daytonaio/daytona/libs/api-client-go"
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
@@ -19,7 +19,6 @@ import (
 
 type Config struct {
 	ProxyPort             int          `envconfig:"PROXY_PORT" validate:"required"`
-	ProxyDomain           string       `envconfig:"PROXY_DOMAIN" validate:"required"`
 	ProxyProtocol         string       `envconfig:"PROXY_PROTOCOL" validate:"required"`
 	ProxyApiKey           string       `envconfig:"PROXY_API_KEY" validate:"required"`
 	CookieDomain          *string      `envconfig:"COOKIE_DOMAIN"`
@@ -88,7 +87,7 @@ func GetConfig() (*Config, error) {
 	}
 
 	if config.Redis != nil {
-		if config.Redis.Host == nil && config.Redis.Port == nil && config.Redis.Password == nil {
+		if config.Redis.Host == nil || *config.Redis.Host == "" {
 			config.Redis = nil
 		}
 	}
@@ -114,9 +113,9 @@ func GetConfig() (*Config, error) {
 	err = utils.RetryWithExponentialBackoff(
 		ctx,
 		"get Daytona API config",
-		utils.DEFAULT_MAX_RETRIES,
+		10,
 		time.Second,
-		10*time.Second,
+		1*time.Minute,
 		func() error {
 			apiConfig, _, err := config.ApiClient.ConfigAPI.ConfigControllerGetConfig(ctx).Execute()
 			if err != nil {

@@ -24,6 +24,7 @@ import {
 import { SandboxFilters, SandboxSorting } from '@/hooks/useSandboxes'
 import { LocalStorageKey } from '@/enums/LocalStorageKey'
 import { getLocalStorageItem, setLocalStorageItem } from '@/lib/local-storage'
+import { getRegionFullDisplayName } from '@/lib/utils'
 
 interface UseSandboxTableProps {
   data: Sandbox[]
@@ -50,6 +51,7 @@ interface UseSandboxTableProps {
   onFiltersChange: (filters: SandboxFilters) => void
   regionsData: Region[]
   handleRecover: (id: string) => void
+  getRegionName: (regionId: string) => string | undefined
 }
 
 export function useSandboxTable({
@@ -74,6 +76,7 @@ export function useSandboxTable({
   onFiltersChange,
   regionsData,
   handleRecover,
+  getRegionName,
 }: UseSandboxTableProps) {
   // Column visibility state management with persistence
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
@@ -98,7 +101,7 @@ export function useSandboxTable({
 
   const regionOptions: FacetedFilterOption[] = useMemo(() => {
     return regionsData.map((region) => ({
-      label: `${region.name}${region.organizationId && region.name !== region.id ? ` (${region.id})` : ''}`,
+      label: getRegionFullDisplayName(region),
       value: region.id,
     }))
   }, [regionsData])
@@ -118,6 +121,7 @@ export function useSandboxTable({
         handleCreateSshAccess,
         handleRevokeSshAccess,
         handleRecover,
+        getRegionName,
       }),
     [
       handleStart,
@@ -132,6 +136,7 @@ export function useSandboxTable({
       handleCreateSshAccess,
       handleRevokeSshAccess,
       handleRecover,
+      getRegionName,
     ],
   )
 

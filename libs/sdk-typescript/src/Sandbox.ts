@@ -15,6 +15,7 @@ import {
   Configuration,
   SshAccessDto,
   SshAccessValidationDto,
+  SignedPortPreviewUrl,
 } from '@daytonaio/api-client'
 import {
   FileSystemApi,
@@ -134,7 +135,7 @@ export class Sandbox implements SandboxDto {
     private readonly axiosInstance: AxiosInstance,
     private readonly sandboxApi: SandboxApi,
     private readonly codeToolbox: SandboxCodeToolbox,
-    private readonly getToolboxBaseUrl: () => Promise<string>,
+    private readonly getToolboxBaseUrl: (sandboxId: string, regionId: string) => Promise<string>,
   ) {
     this.processSandboxDto(sandboxDto)
 
@@ -545,6 +546,28 @@ export class Sandbox implements SandboxDto {
   }
 
   /**
+   * Retrieves a signed preview url for the sandbox at the specified port.
+   *
+   * @param {number} port - The port to open the preview link on.
+   * @param {number} [expiresInSeconds] - The number of seconds the signed preview url will be valid for. Defaults to 60 seconds.
+   * @returns {Promise<SignedPortPreviewUrl>} The response object for the signed preview url.
+   */
+  public async getSignedPreviewUrl(port: number, expiresInSeconds?: number): Promise<SignedPortPreviewUrl> {
+    return (await this.sandboxApi.getSignedPortPreviewUrl(this.id, port, undefined, expiresInSeconds)).data
+  }
+
+  /**
+   * Expires a signed preview url for the sandbox at the specified port.
+   *
+   * @param {number} port - The port to expire the signed preview url on.
+   * @param {string} token - The token to expire the signed preview url on.
+   * @returns {Promise<void>}
+   */
+  public async expireSignedPreviewUrl(port: number, token: string): Promise<void> {
+    await this.sandboxApi.expireSignedPortPreviewUrl(this.id, port, token)
+  }
+
+  /**
    * Archives the sandbox, making it inactive and preserving its state. When sandboxes are archived, the entire filesystem
    * state is moved to cost-effective object storage, making it possible to keep sandboxes available for an extended period.
    * The tradeoff between archived and stopped states is that starting an archived sandbox takes more time, depending on its size.
@@ -641,7 +664,7 @@ export class Sandbox implements SandboxDto {
     if (this.axiosInstance.defaults.baseURL !== TOOLBOX_URL_PLACEHOLDER) {
       return
     }
-    this.axiosInstance.defaults.baseURL = await this.getToolboxBaseUrl()
+    this.axiosInstance.defaults.baseURL = await this.getToolboxBaseUrl(this.id, this.target)
     if (!this.axiosInstance.defaults.baseURL.endsWith('/')) {
       this.axiosInstance.defaults.baseURL += '/'
     }

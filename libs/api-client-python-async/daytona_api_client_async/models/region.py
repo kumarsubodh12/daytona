@@ -20,6 +20,7 @@ import json
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List, Optional
+from daytona_api_client_async.models.region_type import RegionType
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -29,11 +30,15 @@ class Region(BaseModel):
     """ # noqa: E501
     id: StrictStr = Field(description="Region ID")
     name: StrictStr = Field(description="Region name")
-    organization_id: Optional[StrictStr] = Field(default=None, description="Organization ID", alias="organizationId")
-    created_at: StrictStr = Field(description="Creation timestamp", alias="createdAt")
-    updated_at: StrictStr = Field(description="Last update timestamp", alias="updatedAt")
+    organization_id: Optional[StrictStr] = Field(default=None, description="Organization ID", serialization_alias="organizationId")
+    region_type: RegionType = Field(description="The type of the region", serialization_alias="regionType")
+    created_at: StrictStr = Field(description="Creation timestamp", serialization_alias="createdAt")
+    updated_at: StrictStr = Field(description="Last update timestamp", serialization_alias="updatedAt")
+    proxy_url: Optional[StrictStr] = Field(default=None, description="Proxy URL for the region", serialization_alias="proxyUrl")
+    ssh_gateway_url: Optional[StrictStr] = Field(default=None, description="SSH Gateway URL for the region", serialization_alias="sshGatewayUrl")
+    snapshot_manager_url: Optional[StrictStr] = Field(default=None, description="Snapshot Manager URL for the region", serialization_alias="snapshotManagerUrl")
     additional_properties: Dict[str, Any] = {}
-    __properties: ClassVar[List[str]] = ["id", "name", "organizationId", "createdAt", "updatedAt"]
+    __properties: ClassVar[List[str]] = ["id", "name", "organizationId", "regionType", "createdAt", "updatedAt", "proxyUrl", "sshGatewayUrl", "snapshotManagerUrl"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -86,6 +91,21 @@ class Region(BaseModel):
         if self.organization_id is None and "organization_id" in self.model_fields_set:
             _dict['organizationId'] = None
 
+        # set to None if proxy_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.proxy_url is None and "proxy_url" in self.model_fields_set:
+            _dict['proxyUrl'] = None
+
+        # set to None if ssh_gateway_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.ssh_gateway_url is None and "ssh_gateway_url" in self.model_fields_set:
+            _dict['sshGatewayUrl'] = None
+
+        # set to None if snapshot_manager_url (nullable) is None
+        # and model_fields_set contains the field
+        if self.snapshot_manager_url is None and "snapshot_manager_url" in self.model_fields_set:
+            _dict['snapshotManagerUrl'] = None
+
         return _dict
 
     @classmethod
@@ -100,9 +120,13 @@ class Region(BaseModel):
         _obj = cls.model_validate({
             "id": obj.get("id"),
             "name": obj.get("name"),
-            "organizationId": obj.get("organizationId"),
-            "createdAt": obj.get("createdAt"),
-            "updatedAt": obj.get("updatedAt")
+            "organization_id": obj.get("organizationId"),
+            "region_type": obj.get("regionType"),
+            "created_at": obj.get("createdAt"),
+            "updated_at": obj.get("updatedAt"),
+            "proxy_url": obj.get("proxyUrl"),
+            "ssh_gateway_url": obj.get("sshGatewayUrl"),
+            "snapshot_manager_url": obj.get("snapshotManagerUrl")
         })
         # store additional fields in additional_properties
         for _key in obj.keys():

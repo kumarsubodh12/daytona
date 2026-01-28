@@ -6,14 +6,17 @@ package main
 import (
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"time"
 
 	golog "log"
 
 	"github.com/daytonaio/runner/cmd/runner/config"
+	"github.com/daytonaio/runner/internal/metrics"
 	"github.com/daytonaio/runner/internal/util"
 	"github.com/daytonaio/runner/pkg/api"
 	"github.com/daytonaio/runner/pkg/cache"
@@ -21,10 +24,15 @@ import (
 	"github.com/daytonaio/runner/pkg/docker"
 	"github.com/daytonaio/runner/pkg/netrules"
 	"github.com/daytonaio/runner/pkg/runner"
+	"github.com/daytonaio/runner/pkg/runner/v2/executor"
+	"github.com/daytonaio/runner/pkg/runner/v2/healthcheck"
+	"github.com/daytonaio/runner/pkg/runner/v2/poller"
 	"github.com/daytonaio/runner/pkg/services"
 	"github.com/daytonaio/runner/pkg/sshgateway"
 	"github.com/docker/docker/client"
 	"github.com/joho/godotenv"
+	"github.com/lmittmann/tint"
+	"github.com/mattn/go-isatty"
 
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
@@ -38,13 +46,6 @@ func main() {
 		log.Errorf("Failed to get config: %v", err)
 		return
 	}
-
-	apiServer := api.NewApiServer(api.ApiServerConfig{
-		ApiPort:     cfg.ApiPort,
-		TLSCertFile: cfg.TLSCertFile,
-		TLSKeyFile:  cfg.TLSKeyFile,
-		EnableTLS:   cfg.EnableTLS,
-	})
 
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -65,16 +66,6 @@ func main() {
 		log.Error(err)
 		return
 	}
-
-	// Start Docker events monitor
-	monitor := docker.NewDockerMonitor(cli, netRulesManager)
-	go func() {
-		err = monitor.Start()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-	defer monitor.Stop()
 	defer netRulesManager.Stop()
 
 	daemonPath, err := daemon.WriteStaticBinary("daemon-amd64")
@@ -95,27 +86,38 @@ func main() {
 	statesCache := cache.GetStatesCache(cfg.CacheRetentionDays)
 
 	dockerClient := docker.NewDockerClient(docker.DockerClientConfig{
-		ApiClient:              cli,
-		StatesCache:            statesCache,
-		LogWriter:              os.Stdout,
-		AWSRegion:              cfg.AWSRegion,
-		AWSEndpointUrl:         cfg.AWSEndpointUrl,
-		AWSAccessKeyId:         cfg.AWSAccessKeyId,
-		AWSSecretAccessKey:     cfg.AWSSecretAccessKey,
-		DaemonPath:             daemonPath,
-		ComputerUsePluginPath:  pluginPath,
-		NetRulesManager:        netRulesManager,
-		ResourceLimitsDisabled: cfg.ResourceLimitsDisabled,
-		UseSnapshotEntrypoint:  cfg.UseSnapshotEntrypoint,
+		ApiClient:                cli,
+		StatesCache:              statesCache,
+		LogWriter:                os.Stdout,
+		AWSRegion:                cfg.AWSRegion,
+		AWSEndpointUrl:           cfg.AWSEndpointUrl,
+		AWSAccessKeyId:           cfg.AWSAccessKeyId,
+		AWSSecretAccessKey:       cfg.AWSSecretAccessKey,
+		DaemonPath:               daemonPath,
+		ComputerUsePluginPath:    pluginPath,
+		NetRulesManager:          netRulesManager,
+		ResourceLimitsDisabled:   cfg.ResourceLimitsDisabled,
+		UseSnapshotEntrypoint:    cfg.UseSnapshotEntrypoint,
+		VolumeCleanupIntervalSec: cfg.VolumeCleanupIntervalSec,
+		BackupTimeoutMin:         cfg.BackupTimeoutMin,
 	})
+
+	// Start Docker events monitor
+	monitorOpts := docker.MonitorOptions{
+		OnDestroyEvent: func(ctx context.Context) {
+			dockerClient.CleanupOrphanedVolumeMounts(ctx)
+		},
+	}
+	monitor := docker.NewDockerMonitor(cli, netRulesManager, monitorOpts)
+	go func() {
+		err = monitor.Start()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+	defer monitor.Stop()
 
 	sandboxService := services.NewSandboxService(statesCache, dockerClient)
-
-	metricsService := services.NewMetricsService(services.MetricsServiceConfig{
-		Docker:   dockerClient,
-		Interval: 15 * time.Second,
-	})
-	metricsService.StartMetricsCollection(ctx)
 
 	// Initialize sandbox state synchronization service
 	sandboxSyncService := services.NewSandboxSyncService(services.SandboxSyncServiceConfig{
@@ -139,13 +141,76 @@ func main() {
 		log.Info("Gateway disabled - set SSH_GATEWAY_ENABLE=true to enable")
 	}
 
+	// Setup structured logger
+	slogLogger := newSLogger()
+
+	// Create metrics collector
+	metricsCollector := metrics.NewCollector(slogLogger, dockerClient, cfg.CollectorWindowSize)
+	metricsCollector.Start(ctx)
+
 	_ = runner.GetInstance(&runner.RunnerInstanceConfig{
 		StatesCache:       statesCache,
 		Docker:            dockerClient,
 		SandboxService:    sandboxService,
-		MetricsService:    metricsService,
+		MetricsCollector:  metricsCollector,
 		NetRulesManager:   netRulesManager,
 		SSHGatewayService: sshGatewayService,
+	})
+
+	if cfg.ApiVersion == 2 {
+		healthcheckService, err := healthcheck.NewService(&healthcheck.HealthcheckServiceConfig{
+			Interval:   cfg.HealthcheckInterval,
+			Timeout:    cfg.HealthcheckTimeout,
+			Collector:  metricsCollector,
+			Logger:     slogLogger,
+			Domain:     cfg.Domain,
+			ApiPort:    cfg.ApiPort,
+			ProxyPort:  cfg.ApiPort,
+			TlsEnabled: cfg.EnableTLS,
+		})
+		if err != nil {
+			log.Fatalf("Failed to create healthcheck service: %v", err)
+		}
+
+		go func() {
+			log.Info("Starting healthcheck service")
+			healthcheckService.Start(ctx)
+		}()
+
+		executorService, err := executor.NewExecutor(&executor.ExecutorConfig{
+			Logger:    slogLogger,
+			Docker:    dockerClient,
+			Collector: metricsCollector,
+		})
+		if err != nil {
+			log.Fatalf("Failed to create executor service: %v", err)
+		}
+
+		pollerService, err := poller.NewService(&poller.PollerServiceConfig{
+			PollTimeout: cfg.PollTimeout,
+			PollLimit:   cfg.PollLimit,
+			Logger:      slogLogger,
+			Executor:    executorService,
+		})
+		if err != nil {
+			log.Fatalf("Failed to create poller service: %v", err)
+		}
+
+		go func() {
+			log.Info("Starting poller service")
+			pollerService.Start(ctx)
+			if err != nil {
+				log.Errorf("Poller service error: %v", err)
+			}
+		}()
+	}
+
+	apiServer := api.NewApiServer(api.ApiServerConfig{
+		ApiPort:     cfg.ApiPort,
+		ApiToken:    cfg.ApiToken,
+		TLSCertFile: cfg.TLSCertFile,
+		TLSKeyFile:  cfg.TLSKeyFile,
+		EnableTLS:   cfg.EnableTLS,
 	})
 
 	apiServerErrChan := make(chan error)
@@ -224,4 +289,30 @@ func init() {
 	})
 
 	golog.SetOutput(&util.DebugLogWriter{})
+}
+
+func newSLogger() *slog.Logger {
+	log := slog.New(tint.NewHandler(os.Stdout, &tint.Options{
+		NoColor:    !isatty.IsTerminal(os.Stdout.Fd()),
+		TimeFormat: time.RFC3339,
+		Level:      parseLogLevel(os.Getenv("LOG_LEVEL")),
+	}))
+	slog.SetDefault(log)
+	return log
+}
+
+// parseLogLevel converts a string log level to slog.Level
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(level) {
+	case "debug":
+		return slog.LevelDebug
+	case "info":
+		return slog.LevelInfo
+	case "warn", "warning":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }

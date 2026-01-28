@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daytonaio/apiclient"
+	apiclient "github.com/daytonaio/daytona/libs/api-client-go"
 	"golang.org/x/crypto/ssh"
 
 	log "github.com/sirupsen/logrus"
@@ -197,8 +197,14 @@ func (g *SSHGateway) handleConnection(conn net.Conn, serverConfig *ssh.ServerCon
 		return
 	}
 
+	if runner.Domain == nil {
+		log.Printf("Runner domain is nil for sandbox ID: %s", validation.SandboxId)
+		g.sendErrorAndClose(conn, "Runner domain not found. Cannot establish SSH connection.")
+		return
+	}
+
 	runnerID := runner.Id
-	runnerDomain := runner.Domain
+	runnerDomain := *runner.Domain
 	sandboxId := validation.SandboxId
 
 	log.Printf("Token validated, SSH connection established for runner: %s", runnerID)

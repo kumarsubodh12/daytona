@@ -3,11 +3,16 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
+import {
+  Command,
+  CommandCheckboxItem,
+  CommandGroup,
+  CommandInput,
+  CommandInputButton,
+  CommandList,
+} from '@/components/ui/command'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { SandboxState } from '@daytonaio/api-client'
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
-import { Command, CommandList, CommandGroup, CommandItem, CommandInput } from '@/components/ui/command'
-import { cn } from '@/lib/utils'
-import { Check } from 'lucide-react'
 import { X } from 'lucide-react'
 import { STATUSES, getStateLabel } from '../constants'
 
@@ -47,19 +52,21 @@ export function StateFilterIndicator({ value, onFilterChange }: StateFilterProps
 export function StateFilter({ value, onFilterChange }: StateFilterProps) {
   return (
     <Command>
-      <div className="flex items-center gap-2 justify-between px-2 pt-2 pb-1">
-        <CommandInput placeholder="Search..." className="border border-border rounded-md h-8" />
-        <button
+      <CommandInput placeholder="Search...">
+        <CommandInputButton
           className="text-sm text-muted-foreground hover:text-primary px-2"
           onClick={() => onFilterChange(undefined)}
         >
           Clear
-        </button>
-      </div>
+        </CommandInputButton>
+      </CommandInput>
+
       <CommandList>
         <CommandGroup>
           {STATUSES.map((status) => (
-            <CommandItem
+            <CommandCheckboxItem
+              key={status.value}
+              checked={value.includes(status.value)}
               onSelect={() => {
                 const newValue = value.includes(status.value)
                   ? value.filter((v) => v !== status.value)
@@ -67,20 +74,8 @@ export function StateFilter({ value, onFilterChange }: StateFilterProps) {
                 onFilterChange(newValue.length > 0 ? newValue : undefined)
               }}
             >
-              <div className="flex items-center">
-                <div
-                  className={cn(
-                    'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary',
-                    value.includes(status.value)
-                      ? 'bg-primary text-primary-foreground'
-                      : 'opacity-50 [&_svg]:invisible',
-                  )}
-                >
-                  <Check className={cn('h-4 w-4')} />
-                </div>
-                {status.label}
-              </div>
-            </CommandItem>
+              {status.label}
+            </CommandCheckboxItem>
           ))}
         </CommandGroup>
       </CommandList>

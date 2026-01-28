@@ -17,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Button, buttonVariants } from '@/components/ui/button'
+import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { DAYTONA_DOCS_URL } from '@/constants/ExternalLinks'
 import { DEFAULT_PAGE_SIZE } from '@/constants/Pagination'
@@ -37,10 +37,17 @@ import {
 } from '@/hooks/useSandboxes'
 import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { getSnapshotsQueryKey, SnapshotFilters, SnapshotQueryParams, useSnapshots } from '@/hooks/useSnapshots'
+import { createBulkActionToast } from '@/lib/bulk-action-toast'
 import { handleApiError } from '@/lib/error-handling'
 import { getLocalStorageItem, setLocalStorageItem } from '@/lib/local-storage'
-import { formatDuration } from '@/lib/utils'
-import { OrganizationUserRoleEnum, Sandbox, SandboxDesiredState, SandboxState } from '@daytonaio/api-client'
+import { formatDuration, pluralize } from '@/lib/utils'
+import {
+  OrganizationUserRoleEnum,
+  Sandbox,
+  SandboxDesiredState,
+  SandboxState,
+  SshAccessDto,
+} from '@daytonaio/api-client'
 import { QueryKey, useQueryClient } from '@tanstack/react-query'
 import { Check, Copy } from 'lucide-react'
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
@@ -256,7 +263,7 @@ const Sandboxes: React.FC = () => {
 
   const [showCreateSshDialog, setShowCreateSshDialog] = useState(false)
   const [showRevokeSshDialog, setShowRevokeSshDialog] = useState(false)
-  const [sshToken, setSshToken] = useState<string>('')
+  const [sshAccess, setSshAccess] = useState<SshAccessDto | null>(null)
   const [sshExpiryMinutes, setSshExpiryMinutes] = useState<number>(60)
   const [revokeSshToken, setRevokeSshToken] = useState<string>('')
   const [sshSandboxId, setSshSandboxId] = useState<string>('')
@@ -302,7 +309,7 @@ const Sandboxes: React.FC = () => {
 
   // Region Filter
 
-  const { regions: regionsData, loadingRegions: regionsDataIsLoading } = useRegions()
+  const { availableRegions: regionsData, loadingAvailableRegions: regionsDataIsLoading, getRegionName } = useRegions()
 
   // Subscribe to Sandbox Events
 
@@ -515,53 +522,6 @@ const Sandboxes: React.FC = () => {
     }
   }
 
-  const handleBulkDelete = async (ids: string[]) => {
-    setSandboxIsLoading((prev) => ({ ...prev, ...ids.reduce((acc, id) => ({ ...acc, [id]: true }), {}) }))
-    setSandboxStateIsTransitioning((prev) => ({ ...prev, ...ids.reduce((acc, id) => ({ ...acc, [id]: true }), {}) }))
-
-    await cancelQueryRefetches(queryKey)
-
-    const selectedSandboxInBulk = selectedSandbox && ids.includes(selectedSandbox.id)
-
-    for (const id of ids) {
-      const sandboxToDelete = sandboxesData?.items.find((s) => s.id === id)
-      const previousState = sandboxToDelete?.state
-
-      performSandboxStateOptimisticUpdate(id, SandboxState.DESTROYING)
-
-      try {
-        await sandboxApi.deleteSandbox(id, selectedOrganization?.id)
-        toast.success(`Deleting sandbox with ID: ${id}`)
-        await markAllSandboxQueriesAsStale()
-      } catch (error) {
-        handleApiError(error, 'Failed to delete sandbox')
-
-        revertSandboxStateOptimisticUpdate(id, previousState)
-
-        const shouldContinue = window.confirm(
-          `Failed to delete sandbox with ID: ${id}. Do you want to continue with the remaining sandboxes?`,
-        )
-
-        if (!shouldContinue) {
-          break
-        }
-      } finally {
-        setSandboxIsLoading((prev) => ({ ...prev, ...ids.reduce((acc, id) => ({ ...acc, [id]: false }), {}) }))
-        setTimeout(() => {
-          setSandboxStateIsTransitioning((prev) => ({
-            ...prev,
-            ...ids.reduce((acc, id) => ({ ...acc, [id]: false }), {}),
-          }))
-        }, 2000)
-      }
-    }
-
-    if (selectedSandboxInBulk) {
-      setShowSandboxDetails(false)
-      setSelectedSandbox(null)
-    }
-  }
-
   const handleArchive = async (id: string) => {
     setSandboxIsLoading((prev) => ({ ...prev, [id]: true }))
     setSandboxStateIsTransitioning((prev) => ({ ...prev, [id]: true }))
@@ -587,11 +547,160 @@ const Sandboxes: React.FC = () => {
     }
   }
 
+  // todo(rpavlini): we should refactor this and move to react-query mutations
+  const executeBulkAction = useCallback(
+    async ({
+      ids,
+      actionName,
+      optimisticState,
+      apiCall,
+      toastMessages,
+    }: {
+      ids: string[]
+      actionName: string
+      optimisticState: SandboxState
+      apiCall: (id: string) => Promise<unknown>
+      toastMessages: {
+        successTitle: string
+        errorTitle: string
+        warningTitle: string
+        canceledTitle: string
+      }
+    }) => {
+      await cancelQueryRefetches(queryKey)
+
+      const previousStatesById = new Map((sandboxesData?.items ?? []).map((sandbox) => [sandbox.id, sandbox.state]))
+
+      let isCancelled = false
+      let processedCount = 0
+      let successCount = 0
+      let failureCount = 0
+
+      const totalLabel = pluralize(ids.length, 'sandbox', 'sandboxes')
+      const onCancel = () => {
+        isCancelled = true
+      }
+
+      const bulkToast = createBulkActionToast(`${actionName} 0 of ${totalLabel}.`, {
+        action: { label: 'Cancel', onClick: onCancel },
+      })
+
+      try {
+        for (const id of ids) {
+          if (isCancelled) break
+
+          processedCount += 1
+          bulkToast.loading(`${actionName} ${processedCount} of ${totalLabel}.`, {
+            action: { label: 'Cancel', onClick: onCancel },
+          })
+
+          setSandboxIsLoading((prev) => ({ ...prev, [id]: true }))
+          setSandboxStateIsTransitioning((prev) => ({ ...prev, [id]: true }))
+          performSandboxStateOptimisticUpdate(id, optimisticState)
+
+          try {
+            await apiCall(id)
+            successCount += 1
+          } catch (error) {
+            failureCount += 1
+            revertSandboxStateOptimisticUpdate(id, previousStatesById.get(id))
+            console.error(`Failed to ${actionName.toLowerCase()} sandbox`, id, error)
+          } finally {
+            setSandboxIsLoading((prev) => ({ ...prev, [id]: false }))
+            setTimeout(() => {
+              setSandboxStateIsTransitioning((prev) => ({ ...prev, [id]: false }))
+            }, 2000)
+          }
+        }
+
+        await markAllSandboxQueriesAsStale()
+        bulkToast.result({ successCount, failureCount }, toastMessages)
+      } catch (error) {
+        console.error(`Failed to ${actionName.toLowerCase()} sandboxes`, error)
+        bulkToast.error(`Failed to ${actionName.toLowerCase()} sandboxes.`)
+      }
+
+      return { successCount, failureCount }
+    },
+    [
+      cancelQueryRefetches,
+      queryKey,
+      sandboxesData?.items,
+      performSandboxStateOptimisticUpdate,
+      revertSandboxStateOptimisticUpdate,
+      markAllSandboxQueriesAsStale,
+    ],
+  )
+
+  const handleBulkStart = (ids: string[]) =>
+    executeBulkAction({
+      ids,
+      actionName: 'Starting',
+      optimisticState: SandboxState.STARTING,
+      apiCall: (id) => sandboxApi.startSandbox(id, selectedOrganization?.id),
+      toastMessages: {
+        successTitle: `${pluralize(ids.length, 'sandbox', 'sandboxes')} started.`,
+        errorTitle: `Failed to start ${pluralize(ids.length, 'sandbox', 'sandboxes')}.`,
+        warningTitle: 'Failed to start some sandboxes.',
+        canceledTitle: 'Start canceled.',
+      },
+    })
+
+  const handleBulkStop = (ids: string[]) =>
+    executeBulkAction({
+      ids,
+      actionName: 'Stopping',
+      optimisticState: SandboxState.STOPPING,
+      apiCall: (id) => sandboxApi.stopSandbox(id, selectedOrganization?.id),
+      toastMessages: {
+        successTitle: `${pluralize(ids.length, 'sandbox', 'sandboxes')} stopped.`,
+        errorTitle: `Failed to stop ${pluralize(ids.length, 'sandbox', 'sandboxes')}.`,
+        warningTitle: 'Failed to stop some sandboxes.',
+        canceledTitle: 'Stop canceled.',
+      },
+    })
+
+  const handleBulkArchive = (ids: string[]) =>
+    executeBulkAction({
+      ids,
+      actionName: 'Archiving',
+      optimisticState: SandboxState.ARCHIVING,
+      apiCall: (id) => sandboxApi.archiveSandbox(id, selectedOrganization?.id),
+      toastMessages: {
+        successTitle: `${pluralize(ids.length, 'sandbox', 'sandboxes')} archived.`,
+        errorTitle: `Failed to archive ${pluralize(ids.length, 'sandbox', 'sandboxes')}.`,
+        warningTitle: 'Failed to archive some sandboxes.',
+        canceledTitle: 'Archive canceled.',
+      },
+    })
+
+  const handleBulkDelete = async (ids: string[]) => {
+    const selectedSandboxInBulk = selectedSandbox && ids.includes(selectedSandbox.id)
+
+    await executeBulkAction({
+      ids,
+      actionName: 'Deleting',
+      optimisticState: SandboxState.DESTROYING,
+      apiCall: (id) => sandboxApi.deleteSandbox(id, selectedOrganization?.id),
+      toastMessages: {
+        successTitle: `${pluralize(ids.length, 'sandbox', 'sandboxes')} deleted.`,
+        errorTitle: `Failed to delete ${pluralize(ids.length, 'sandbox', 'sandboxes')}.`,
+        warningTitle: 'Failed to delete some sandboxes.',
+        canceledTitle: 'Delete canceled.',
+      },
+    })
+
+    if (selectedSandboxInBulk) {
+      setShowSandboxDetails(false)
+      setSelectedSandbox(null)
+    }
+  }
+
   const getPortPreviewUrl = useCallback(
     async (sandboxId: string, port: number): Promise<string> => {
       setSandboxIsLoading((prev) => ({ ...prev, [sandboxId]: true }))
       try {
-        return (await sandboxApi.getPortPreviewUrl(sandboxId, port, selectedOrganization?.id)).data.url
+        return (await sandboxApi.getSignedPortPreviewUrl(sandboxId, port, selectedOrganization?.id)).data.url
       } finally {
         setSandboxIsLoading((prev) => ({ ...prev, [sandboxId]: false }))
       }
@@ -709,7 +818,7 @@ const Sandboxes: React.FC = () => {
     setSandboxIsLoading((prev) => ({ ...prev, [id]: true }))
     try {
       const response = await sandboxApi.createSshAccess(id, selectedOrganization?.id, sshExpiryMinutes)
-      setSshToken(response.data.token)
+      setSshAccess(response.data)
       setSshSandboxId(id)
       setShowCreateSshDialog(true)
       toast.success('SSH access created successfully')
@@ -809,7 +918,7 @@ const Sandboxes: React.FC = () => {
           </div>
         )}
       </PageHeader>
-      <PageContent size="full" className="flex-1">
+      <PageContent size="full" className="flex-1 max-h-[calc(100vh-65px)]">
         <SandboxTable
           sandboxIsLoading={sandboxIsLoading}
           sandboxStateIsTransitioning={sandboxStateIsTransitioning}
@@ -820,6 +929,9 @@ const Sandboxes: React.FC = () => {
             setShowDeleteDialog(true)
           }}
           handleBulkDelete={handleBulkDelete}
+          handleBulkStart={handleBulkStart}
+          handleBulkStop={handleBulkStop}
+          handleBulkArchive={handleBulkArchive}
           handleArchive={handleArchive}
           handleVnc={handleVnc}
           getWebTerminalUrl={getWebTerminalUrl}
@@ -851,6 +963,7 @@ const Sandboxes: React.FC = () => {
           filters={filters}
           onFiltersChange={handleFiltersChange}
           handleRecover={handleRecover}
+          getRegionName={getRegionName}
         />
 
         {sandboxToDelete && (
@@ -873,7 +986,7 @@ const Sandboxes: React.FC = () => {
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                 <AlertDialogAction
-                  className={buttonVariants({ variant: 'destructive' })}
+                  variant="destructive"
                   onClick={() => handleDelete(sandboxToDelete)}
                   disabled={sandboxIsLoading[sandboxToDelete]}
                 >
@@ -890,7 +1003,7 @@ const Sandboxes: React.FC = () => {
           onOpenChange={(isOpen) => {
             setShowCreateSshDialog(isOpen)
             if (!isOpen) {
-              setSshToken('')
+              setSshAccess(null)
               setSshExpiryMinutes(60)
               setSshSandboxId('')
             }
@@ -900,13 +1013,13 @@ const Sandboxes: React.FC = () => {
             <AlertDialogHeader>
               <AlertDialogTitle>Create SSH Access</AlertDialogTitle>
               <AlertDialogDescription>
-                {sshToken
+                {sshAccess
                   ? 'SSH access has been created successfully. Use the token below to connect:'
                   : 'Set the expiration time for SSH access:'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <div className="space-y-4">
-              {!sshToken ? (
+              {!sshAccess ? (
                 <div className="space-y-3">
                   <Label className="text-sm font-medium">Expiry (minutes):</Label>
                   <input
@@ -920,27 +1033,18 @@ const Sandboxes: React.FC = () => {
                 </div>
               ) : (
                 <div className="p-3 flex justify-between items-center rounded-md bg-green-100 text-green-600 dark:bg-green-900/50 dark:text-green-400">
-                  <span className="overflow-x-auto pr-2 cursor-text select-all">
-                    {config.sshGatewayCommand?.replace('{{TOKEN}}', sshToken) ||
-                      `ssh -p 22222 user@host -o ProxyCommand="echo ${sshToken}"`}
-                  </span>
+                  <span className="overflow-x-auto pr-2 cursor-text select-all">{sshAccess.sshCommand}</span>
                   {(copied === 'SSH Command' && <Check className="w-4 h-4" />) || (
                     <Copy
                       className="w-4 h-4 cursor-pointer"
-                      onClick={() =>
-                        copyToClipboard(
-                          config.sshGatewayCommand?.replace('{{TOKEN}}', sshToken) ||
-                            `ssh -p 22222 user@host -o ProxyCommand="echo ${sshToken}"`,
-                          'SSH Command',
-                        )
-                      }
+                      onClick={() => copyToClipboard(sshAccess.sshCommand, 'SSH Command')}
                     />
                   )}
                 </div>
               )}
             </div>
             <AlertDialogFooter>
-              {!sshToken ? (
+              {!sshAccess ? (
                 <>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                   <AlertDialogAction
@@ -1021,6 +1125,7 @@ const Sandboxes: React.FC = () => {
           writePermitted={authenticatedUserOrganizationMember?.role === OrganizationUserRoleEnum.OWNER}
           deletePermitted={authenticatedUserOrganizationMember?.role === OrganizationUserRoleEnum.OWNER}
           handleRecover={handleRecover}
+          getRegionName={getRegionName}
         />
       </PageContent>
     </PageLayout>

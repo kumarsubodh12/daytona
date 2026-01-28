@@ -3,41 +3,62 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm'
+import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from 'typeorm'
 import { SandboxClass } from '../enums/sandbox-class.enum'
 import { RunnerState } from '../enums/runner-state.enum'
 
 @Entity()
+@Unique(['region', 'name'])
+@Index(['state', 'unschedulable', 'region'])
 export class Runner {
   @PrimaryGeneratedColumn('uuid')
   id: string
 
-  @Column({ unique: true })
-  domain: string
+  @Column({
+    nullable: true,
+  })
+  domain: string | null
 
-  @Column()
-  apiUrl: string
+  @Column({
+    nullable: true,
+  })
+  apiUrl: string | null
 
-  @Column()
-  proxyUrl: string
+  @Column({
+    nullable: true,
+  })
+  proxyUrl: string | null
 
   @Column()
   apiKey: string
 
-  @Column()
+  @Column({
+    type: 'float',
+    default: 0,
+  })
   cpu: number
 
-  @Column()
+  @Column({
+    type: 'float',
+    default: 0,
+  })
   memoryGiB: number
 
-  @Column()
+  @Column({
+    type: 'float',
+    default: 0,
+  })
   diskGiB: number
 
-  @Column()
-  gpu: number
+  @Column({
+    nullable: true,
+  })
+  gpu: number | null
 
-  @Column()
-  gpuType: string
+  @Column({
+    nullable: true,
+  })
+  gpuType: string | null
 
   @Column({
     type: 'enum',
@@ -45,6 +66,12 @@ export class Runner {
     default: SandboxClass.SMALL,
   })
   class: SandboxClass
+
+  @Column({
+    type: 'float',
+    default: 0,
+  })
+  currentCpuLoadAverage: number
 
   @Column({
     type: 'float',
@@ -87,10 +114,18 @@ export class Runner {
   @Column({
     default: 0,
   })
+  currentStartedSandboxes: number
+
+  @Column({
+    default: 0,
+  })
   availabilityScore: number
 
   @Column()
   region: string
+
+  @Column()
+  name: string
 
   @Column({
     type: 'enum',
@@ -100,9 +135,15 @@ export class Runner {
   state: RunnerState
 
   @Column({
+    default: 'v0.0.0-dev',
+    nullable: true,
+  })
+  appVersion: string | null
+
+  @Column({
     default: '0',
   })
-  version: string
+  apiVersion: string
 
   @Column({
     nullable: true,
@@ -124,4 +165,42 @@ export class Runner {
     type: 'timestamp with time zone',
   })
   updatedAt: Date
+
+  constructor(params: {
+    region: string
+    name: string
+    apiKey: string
+    apiVersion: string
+    cpu?: number
+    memoryGiB?: number
+    diskGiB?: number
+    domain?: string | null
+    apiUrl?: string
+    proxyUrl?: string
+    appVersion?: string | null
+  }) {
+    this.region = params.region
+    this.name = params.name
+    this.apiKey = params.apiKey
+    this.cpu = params.cpu ?? 0
+    this.memoryGiB = params.memoryGiB ?? 0
+    this.diskGiB = params.diskGiB ?? 0
+    this.domain = params.domain ?? null
+    this.apiUrl = params.apiUrl
+    this.proxyUrl = params.proxyUrl
+    this.class = SandboxClass.SMALL
+    this.apiVersion = params.apiVersion
+    this.appVersion = params.appVersion ?? null
+    this.gpu = null
+    this.gpuType = null
+
+    if (this.apiVersion === '0') {
+      if (!this.apiUrl) {
+        throw new Error('API URL is required for runner version 0')
+      }
+      if (!this.proxyUrl) {
+        this.proxyUrl = this.apiUrl
+      }
+    }
+  }
 }

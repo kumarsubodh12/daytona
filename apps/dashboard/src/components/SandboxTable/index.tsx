@@ -3,34 +3,33 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { flexRender } from '@tanstack/react-table'
-import { useState } from 'react'
-import { Button } from '../ui/button'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
+import { RoutePath } from '@/enums/RoutePath'
+import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
+import { cn } from '@/lib/utils'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '../ui/alert-dialog'
+  filterArchivable,
+  filterDeletable,
+  filterStartable,
+  filterStoppable,
+  getBulkActionCounts,
+} from '@/lib/utils/sandbox'
+import { OrganizationRolePermissionsEnum, Sandbox, SandboxState } from '@daytonaio/api-client'
+import { flexRender } from '@tanstack/react-table'
+import { CommandIcon, Container, XIcon } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
+import { useCallback, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useCommandPaletteActions } from '../CommandPalette'
 import { Pagination } from '../Pagination'
 import { TableEmptyState } from '../TableEmptyState'
-import { SandboxTableProps } from './types'
-import { useSandboxTable } from './useSandboxTable'
+import { Button } from '../ui/button'
+import { Separator } from '../ui/separator'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table'
+import { BulkAction, BulkActionAlertDialog } from './BulkActionAlertDialog'
 import { SandboxTableHeader } from './SandboxTableHeader'
-import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
-import { OrganizationRolePermissionsEnum, SandboxState } from '@daytonaio/api-client'
-import { cn } from '@/lib/utils'
-import { Container, Trash2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { RoutePath } from '@/enums/RoutePath'
-import { AnimatePresence, motion } from 'motion/react'
-import { useSidebar } from '@/components/ui/sidebar'
+import { SandboxTableProps } from './types'
+import { useSandboxCommands } from './useSandboxCommands'
+import { useSandboxTable } from './useSandboxTable'
 
 export function SandboxTable({
   data,
@@ -43,10 +42,14 @@ export function SandboxTable({
   onChangeSnapshotSearchValue,
   regionsData,
   regionsDataIsLoading,
+  getRegionName,
   handleStart,
   handleStop,
   handleDelete,
   handleBulkDelete,
+  handleBulkStart,
+  handleBulkStop,
+  handleBulkArchive,
   handleArchive,
   handleVnc,
   getWebTerminalUrl,
@@ -69,7 +72,6 @@ export function SandboxTable({
   const { authenticatedUserHasPermission } = useSelectedOrganization()
   const writePermitted = authenticatedUserHasPermission(OrganizationRolePermissionsEnum.WRITE_SANDBOXES)
   const deletePermitted = authenticatedUserHasPermission(OrganizationRolePermissionsEnum.DELETE_SANDBOXES)
-  const { state: sidebarState } = useSidebar()
 
   const { table, regionOptions } = useSandboxTable({
     data,
@@ -93,23 +95,71 @@ export function SandboxTable({
     onFiltersChange,
     regionsData,
     handleRecover,
+    getRegionName,
   })
 
-  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false)
+  const [pendingBulkAction, setPendingBulkAction] = useState<BulkAction | null>(null)
 
-  const hasSelection = table.getRowModel().rows.some((row) => row.getIsSelected())
-  const selectedCount = table.getRowModel().rows.filter((row) => row.getIsSelected()).length
+  const selectedRows = table.getRowModel().rows.filter((row) => row.getIsSelected())
+  const hasSelection = selectedRows.length > 0
+  const selectedCount = selectedRows.length
+  const totalCount = table.getRowModel().rows.length
+  const selectedSandboxes: Sandbox[] = selectedRows.map((row) => row.original)
 
-  const handleBulkDeleteConfirm = () => {
-    const selectedIds = table
-      .getRowModel()
-      .rows.filter((row) => row.getIsSelected())
-      .map((row) => row.original.id)
+  const bulkActionCounts = useMemo(() => getBulkActionCounts(selectedSandboxes), [selectedSandboxes])
 
-    handleBulkDelete(selectedIds)
-    setBulkDeleteDialogOpen(false)
+  const handleBulkActionConfirm = () => {
+    if (!pendingBulkAction) return
 
+    const handlers: Record<BulkAction, () => void> = {
+      [BulkAction.Delete]: () => handleBulkDelete(filterDeletable(selectedSandboxes).map((s) => s.id)),
+      [BulkAction.Start]: () => handleBulkStart(filterStartable(selectedSandboxes).map((s) => s.id)),
+      [BulkAction.Stop]: () => handleBulkStop(filterStoppable(selectedSandboxes).map((s) => s.id)),
+      [BulkAction.Archive]: () => handleBulkArchive(filterArchivable(selectedSandboxes).map((s) => s.id)),
+    }
+
+    handlers[pendingBulkAction]()
+    setPendingBulkAction(null)
     table.toggleAllRowsSelected(false)
+  }
+
+  const toggleAllRowsSelected = useCallback(
+    (selected: boolean) => {
+      if (selected) {
+        for (const row of table.getRowModel().rows) {
+          const selectDisabled = sandboxIsLoading[row.original.id] || row.original.state === SandboxState.DESTROYED
+          if (!selectDisabled) {
+            row.toggleSelected(true)
+          }
+        }
+      } else {
+        table.toggleAllRowsSelected(selected)
+      }
+    },
+    [sandboxIsLoading, table],
+  )
+
+  const selectableCount = useMemo(() => {
+    return data.filter((sandbox) => !sandboxIsLoading[sandbox.id] && sandbox.state !== SandboxState.DESTROYED).length
+  }, [sandboxIsLoading, data])
+
+  useSandboxCommands({
+    writePermitted,
+    deletePermitted,
+    selectedCount,
+    totalCount,
+    selectableCount,
+    toggleAllRowsSelected,
+    bulkActionCounts,
+    onDelete: () => setPendingBulkAction(BulkAction.Delete),
+    onStart: () => setPendingBulkAction(BulkAction.Start),
+    onStop: () => setPendingBulkAction(BulkAction.Stop),
+    onArchive: () => setPendingBulkAction(BulkAction.Archive),
+  })
+
+  const { setIsOpen } = useCommandPaletteActions()
+  const handleOpenCommandPalette = () => {
+    setIsOpen(true)
   }
 
   return (
@@ -219,66 +269,53 @@ export function SandboxTable({
         </TableBody>
       </Table>
 
-      <div className="flex items-center justify-end">
-        <Pagination
-          className="pb-2 pt-6"
-          table={table}
-          selectionEnabled={deletePermitted}
-          entityName="Sandboxes"
-          totalItems={totalItems}
-        />
+      <div className="flex items-center justify-end relative">
+        <Pagination className="pb-2 pt-6" table={table} entityName="Sandboxes" totalItems={totalItems} />
+
+        <AnimatePresence>
+          {hasSelection && (
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20, x: '-50%' }}
+              animate={{ scale: 1, opacity: 1, y: 0, x: '-50%' }}
+              exit={{ scale: 0.9, opacity: 0, y: 20, x: '-50%' }}
+              className="bg-popover absolute bottom-5 left-1/2 -translate-x-1/2 z-50 gap-3 max-w-[90vw]"
+            >
+              <div className="bg-background text-foreground border border-border rounded-lg shadow-lg pl-3 pr-1 py-1 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-1">
+                  <div className="text-sm tabular-nums whitespace-nowrap">
+                    {selectedCount} {selectedCount === 1 ? 'item' : 'items'} selected
+                  </div>
+                  <Button variant="ghost" size="icon-sm" onClick={() => table.toggleAllRowsSelected(false)}>
+                    <XIcon className="size-3.5" />
+                  </Button>
+                </div>
+                <Separator orientation="vertical" className="h-5" />
+
+                <Button variant="ghost" size="sm" className="h-8" onClick={handleOpenCommandPalette}>
+                  <CommandIcon className="size-3.5" />
+                  <span className="text-sm">Actions</span>
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {/* Floating Action Bar */}
-      <AnimatePresence>
-        {hasSelection && (
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0, y: 56, x: '-50%' }}
-            animate={{ scale: 1, opacity: 1, y: 0, x: '-50%' }}
-            exit={{ scale: 0.9, opacity: 0, y: 56, x: '-50%' }}
-            className="dark fixed bottom-5 z-50 w-full max-w-md"
-            style={{
-              left:
-                sidebarState === 'collapsed'
-                  ? 'calc(50% + var(--sidebar-width-icon, 65px) / 2)'
-                  : 'calc(50% + var(--sidebar-width, 16rem) / 2)',
-            }}
-          >
-            <div className="bg-background text-foreground border border-border rounded-lg shadow-lg pl-3 pr-2 py-1 flex items-center justify-between gap-4">
-              <div className="text-sm text-muted-foreground">
-                {selectedCount} {selectedCount === 1 ? 'item' : 'items'} selected
-              </div>
-              <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
-                <AlertDialogTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8">
-                    <Trash2 className="w-4 h-4" />
-                    Delete {selectedCount > 1 ? 'All' : ''}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete Sandboxes</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Are you sure you want to delete{' '}
-                      {selectedCount === 1 ? 'this item' : `these ${selectedCount} items`}? This action cannot be
-                      undone.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={handleBulkDeleteConfirm}
-                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <BulkActionAlertDialog
+        action={pendingBulkAction}
+        count={
+          pendingBulkAction
+            ? {
+                [BulkAction.Delete]: bulkActionCounts.deletable,
+                [BulkAction.Start]: bulkActionCounts.startable,
+                [BulkAction.Stop]: bulkActionCounts.stoppable,
+                [BulkAction.Archive]: bulkActionCounts.archivable,
+              }[pendingBulkAction]
+            : 0
+        }
+        onConfirm={handleBulkActionConfirm}
+        onCancel={() => setPendingBulkAction(null)}
+      />
     </>
   )
 }

@@ -64,6 +64,30 @@ const sandbox = await daytona.create({
 ```
 
 </TabItem>
+
+<TabItem label="Ruby" icon="seti:ruby">
+
+```ruby
+require 'daytona'
+
+daytona = Daytona::Daytona.new
+
+# Allow access to specific IP addresses (Wikipedia, X/Twitter, private network)
+sandbox = daytona.create(
+  Daytona::CreateSandboxFromSnapshotParams.new(
+    network_allow_list: '208.80.154.232/32,199.16.156.103/32,192.168.1.0/24'
+  )
+)
+
+# Or block all network access
+sandbox = daytona.create(
+  Daytona::CreateSandboxFromSnapshotParams.new(
+    network_block_all: true
+  )
+)
+```
+
+</TabItem>
 </Tabs>
 
 
@@ -193,7 +217,7 @@ The following services are whitelisted and accessible on all tiers:
 - **Daytona**: `app.daytona.io`
 
 :::note
-This list is continuously updated. If you require access to additional essential development services, please contact [support@daytona.io](mailto:support@daytona.io).
+This list is continuously updated. If you require access to additional essential development services, you can submit a request via the [sandbox-network-whitelist](https://github.com/daytonaio/sandbox-network-whitelist) repository or contact [support@daytona.io](mailto:support@daytona.io).
 :::
 
 

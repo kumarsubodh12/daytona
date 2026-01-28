@@ -17,9 +17,7 @@ from pydantic import validate_call, Field, StrictFloat, StrictStr, StrictInt
 from typing import Any, Dict, List, Optional, Tuple, Union
 from typing_extensions import Annotated
 
-from pydantic import Field, StrictBool, StrictStr
-from typing import List, Optional
-from typing_extensions import Annotated
+from typing import List
 from daytona_api_client.models.region import Region
 
 from daytona_api_client.api_client import ApiClient, RequestSerialized
@@ -41,10 +39,8 @@ class RegionsApi:
 
 
     @validate_call
-    def list_regions(
+    def list_shared_regions(
         self,
-        x_daytona_organization_id: Annotated[Optional[StrictStr], Field(description="Use with JWT to specify the organization ID")] = None,
-        include_shared: Annotated[Optional[StrictBool], Field(description="Include shared regions")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -58,13 +54,9 @@ class RegionsApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> List[Region]:
-        """List all regions
+        """List all shared regions
 
 
-        :param x_daytona_organization_id: Use with JWT to specify the organization ID
-        :type x_daytona_organization_id: str
-        :param include_shared: Include shared regions
-        :type include_shared: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -87,9 +79,7 @@ class RegionsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._list_regions_serialize(
-            x_daytona_organization_id=x_daytona_organization_id,
-            include_shared=include_shared,
+        _param = self._list_shared_regions_serialize(
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -111,10 +101,8 @@ class RegionsApi:
 
 
     @validate_call
-    def list_regions_with_http_info(
+    def list_shared_regions_with_http_info(
         self,
-        x_daytona_organization_id: Annotated[Optional[StrictStr], Field(description="Use with JWT to specify the organization ID")] = None,
-        include_shared: Annotated[Optional[StrictBool], Field(description="Include shared regions")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -128,13 +116,9 @@ class RegionsApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> ApiResponse[List[Region]]:
-        """List all regions
+        """List all shared regions
 
 
-        :param x_daytona_organization_id: Use with JWT to specify the organization ID
-        :type x_daytona_organization_id: str
-        :param include_shared: Include shared regions
-        :type include_shared: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -157,9 +141,7 @@ class RegionsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._list_regions_serialize(
-            x_daytona_organization_id=x_daytona_organization_id,
-            include_shared=include_shared,
+        _param = self._list_shared_regions_serialize(
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -181,10 +163,8 @@ class RegionsApi:
 
 
     @validate_call
-    def list_regions_without_preload_content(
+    def list_shared_regions_without_preload_content(
         self,
-        x_daytona_organization_id: Annotated[Optional[StrictStr], Field(description="Use with JWT to specify the organization ID")] = None,
-        include_shared: Annotated[Optional[StrictBool], Field(description="Include shared regions")] = None,
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -198,13 +178,9 @@ class RegionsApi:
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
     ) -> RESTResponseType:
-        """List all regions
+        """List all shared regions
 
 
-        :param x_daytona_organization_id: Use with JWT to specify the organization ID
-        :type x_daytona_organization_id: str
-        :param include_shared: Include shared regions
-        :type include_shared: bool
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -227,9 +203,7 @@ class RegionsApi:
         :return: Returns the result object.
         """ # noqa: E501
 
-        _param = self._list_regions_serialize(
-            x_daytona_organization_id=x_daytona_organization_id,
-            include_shared=include_shared,
+        _param = self._list_shared_regions_serialize(
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -246,10 +220,8 @@ class RegionsApi:
         return response_data.response
 
 
-    def _list_regions_serialize(
+    def _list_shared_regions_serialize(
         self,
-        x_daytona_organization_id,
-        include_shared,
         _request_auth,
         _content_type,
         _headers,
@@ -272,13 +244,7 @@ class RegionsApi:
 
         # process the path parameters
         # process the query parameters
-        if include_shared is not None:
-            
-            _query_params.append(('includeShared', include_shared))
-            
         # process the header parameters
-        if x_daytona_organization_id is not None:
-            _header_params['X-Daytona-Organization-ID'] = x_daytona_organization_id
         # process the form parameters
         # process the body parameter
 
@@ -300,7 +266,7 @@ class RegionsApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/regions',
+            resource_path='/shared-regions',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

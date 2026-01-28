@@ -1,5 +1,5 @@
 /* tslint:disable */
-
+/* eslint-disable */
 /**
  * Daytona
  * Daytona AI platform API Docs
@@ -11,6 +11,10 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
+
+// May contain unused imports in some cases
+// @ts-ignore
+import type { RegionType } from './region-type'
 
 /**
  *
@@ -37,6 +41,12 @@ export interface Region {
    */
   organizationId?: string | null
   /**
+   * The type of the region
+   * @type {RegionType}
+   * @memberof Region
+   */
+  regionType: RegionType
+  /**
    * Creation timestamp
    * @type {string}
    * @memberof Region
@@ -48,4 +58,22 @@ export interface Region {
    * @memberof Region
    */
   updatedAt: string
+  /**
+   * Proxy URL for the region
+   * @type {string}
+   * @memberof Region
+   */
+  proxyUrl?: string | null
+  /**
+   * SSH Gateway URL for the region
+   * @type {string}
+   * @memberof Region
+   */
+  sshGatewayUrl?: string | null
+  /**
+   * Snapshot Manager URL for the region
+   * @type {string}
+   * @memberof Region
+   */
+  snapshotManagerUrl?: string | null
 }

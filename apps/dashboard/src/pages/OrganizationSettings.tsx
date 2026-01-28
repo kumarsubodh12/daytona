@@ -28,7 +28,7 @@ import { useCopyToClipboard } from 'usehooks-ts'
 const OrganizationSettings: React.FC = () => {
   const { refreshOrganizations } = useOrganizations()
   const { selectedOrganization, authenticatedUserOrganizationMember } = useSelectedOrganization()
-  const { sharedRegions, loadingRegions, getRegionName } = useRegions()
+  const { getRegionName, sharedRegions: regions, loadingSharedRegions: loadingRegions } = useRegions()
 
   const deleteOrganizationMutation = useDeleteOrganizationMutation()
   const leaveOrganizationMutation = useLeaveOrganizationMutation()
@@ -147,24 +147,24 @@ const OrganizationSettings: React.FC = () => {
                   readOnly
                   className="flex-1 uppercase"
                 />
-              ) : (
+              ) : isOwner ? (
                 <div className="flex sm:justify-end">
                   <Button onClick={() => setSetDefaultRegionDialog(true)} variant="secondary">
                     Set Region
                   </Button>
                 </div>
-              )}
+              ) : null}
             </Field>
           </CardContent>
         </Card>
 
         {!selectedOrganization.personal && authenticatedUserOrganizationMember !== null && (
-          <Card className="bg-destructive/5 border-destructive/30">
+          <Card className="bg-destructive-background border-destructive-separator">
             <CardContent>
               <div className="flex sm:flex-row flex-col justify-between sm:items-center gap-2">
                 <div className="text-sm">
                   <div className="text-muted-foreground">
-                    <p className="font-semibold text-destructive">Danger Zone</p>
+                    <p className="font-semibold text-destructive-foreground">Danger Zone</p>
                     {isOwner ? (
                       <>Delete the organization and all associated data.</>
                     ) : (
@@ -191,7 +191,7 @@ const OrganizationSettings: React.FC = () => {
         <SetDefaultRegionDialog
           open={showSetDefaultRegionDialog}
           onOpenChange={setSetDefaultRegionDialog}
-          regions={sharedRegions}
+          regions={regions}
           loadingRegions={loadingRegions}
           onSetDefaultRegion={handleSetDefaultRegion}
         />

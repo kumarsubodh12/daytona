@@ -3,12 +3,7 @@
 
 package session
 
-import (
-	"context"
-	"io"
-	"os/exec"
-	"path/filepath"
-)
+import "github.com/daytonaio/daemon/pkg/session"
 
 type CreateSessionRequest struct {
 	SessionId string `json:"sessionId" validate:"required"`
@@ -21,42 +16,45 @@ type SessionExecuteRequest struct {
 } // @name SessionExecuteRequest
 
 type SessionExecuteResponse struct {
-	CommandId *string `json:"cmdId" validate:"optional"`
+	CommandId string  `json:"cmdId" validate:"required"`
 	Output    *string `json:"output" validate:"optional"`
 	Stdout    *string `json:"stdout" validate:"optional"`
 	Stderr    *string `json:"stderr" validate:"optional"`
 	ExitCode  *int    `json:"exitCode" validate:"optional"`
 } // @name SessionExecuteResponse
 
-type Session struct {
-	SessionId string     `json:"sessionId" validate:"required"`
-	Commands  []*Command `json:"commands" validate:"required"`
-} // @name Session
+type SessionCommandLogsResponse struct {
+	Stdout string `json:"stdout" validate:"required"`
+	Stderr string `json:"stderr" validate:"required"`
+} // @name SessionCommandLogsResponse
 
-type session struct {
-	id          string
-	cmd         *exec.Cmd
-	stdinWriter io.Writer
-	commands    map[string]*Command
-	ctx         context.Context
-	cancel      context.CancelFunc
-}
-
-func (s *session) Dir(configDir string) string {
-	return filepath.Join(configDir, "sessions", s.id)
-}
-
-type Command struct {
+type CommandDTO struct {
 	Id       string `json:"id" validate:"required"`
 	Command  string `json:"command" validate:"required"`
 	ExitCode *int   `json:"exitCode,omitempty" validate:"optional"`
 } // @name Command
 
-func (c *Command) LogFilePath(sessionDir string) (string, string) {
-	return filepath.Join(sessionDir, c.Id, "output.log"), filepath.Join(sessionDir, c.Id, "exit_code")
+type SessionDTO struct {
+	SessionId string        `json:"sessionId" validate:"required"`
+	Commands  []*CommandDTO `json:"commands" validate:"required"`
+} // @name Session
+
+func CommandToDTO(c *session.Command) *CommandDTO {
+	return &CommandDTO{
+		Id:       c.Id,
+		Command:  c.Command,
+		ExitCode: c.ExitCode,
+	}
 }
 
-type SessionCommandLogsResponse struct {
-	Stdout string `json:"stdout" validate:"required"`
-	Stderr string `json:"stderr" validate:"required"`
-} // @name SessionCommandLogsResponse
+func SessionToDTO(s *session.Session) *SessionDTO {
+	commands := make([]*CommandDTO, 0, len(s.Commands))
+	for _, cmd := range s.Commands {
+		commands = append(commands, CommandToDTO(cmd))
+	}
+
+	return &SessionDTO{
+		SessionId: s.SessionId,
+		Commands:  commands,
+	}
+}

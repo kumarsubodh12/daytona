@@ -11,12 +11,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	apiclient "github.com/daytonaio/apiclient"
+	apiclient "github.com/daytonaio/daytona/libs/api-client-go"
 	"github.com/daytonaio/proxy/cmd/proxy/config"
 	"github.com/daytonaio/proxy/internal"
 	"github.com/gin-contrib/cors"
@@ -39,16 +40,28 @@ const SANDBOX_AUTH_KEY_HEADER = "X-Daytona-Preview-Token"
 const SANDBOX_AUTH_KEY_QUERY_PARAM = "DAYTONA_SANDBOX_AUTH_KEY"
 const SANDBOX_AUTH_COOKIE_NAME = "daytona-sandbox-auth-"
 const SKIP_LAST_ACTIVITY_UPDATE_HEADER = "X-Daytona-Skip-Last-Activity-Update"
+const ACTIVITY_POLL_STOP_KEY = "daytona-activity-poll-stop"
 const TERMINAL_PORT = "22222"
 const TOOLBOX_PORT = "2280"
+
+// stopActivityPoll retrieves and calls the activity poll stop function from the gin context.
+// This ensures the polling goroutine is stopped when the request (including WebSocket) finishes.
+func stopActivityPoll(ctx *gin.Context) {
+	if stopFn, exists := ctx.Get(ACTIVITY_POLL_STOP_KEY); exists {
+		if fn, ok := stopFn.(func()); ok {
+			fn()
+		}
+	}
+}
 
 type Proxy struct {
 	config       *config.Config
 	secureCookie *securecookie.SecureCookie
-	cookieDomain string
+	cookieDomain *string
 
 	apiclient                      *apiclient.APIClient
 	runnerCache                    common_cache.ICache[RunnerInfo]
+	sandboxRunnerCache             common_cache.ICache[RunnerInfo]
 	sandboxPublicCache             common_cache.ICache[bool]
 	sandboxAuthKeyValidCache       common_cache.ICache[bool]
 	sandboxLastActivityUpdateCache common_cache.ICache[bool]
@@ -60,19 +73,20 @@ func StartProxy(ctx context.Context, config *config.Config) error {
 	}
 
 	proxy.secureCookie = securecookie.New([]byte(config.ProxyApiKey), nil)
-	cookieDomain := config.ProxyDomain
 	if config.CookieDomain != nil {
-		cookieDomain = *config.CookieDomain
+		cookieDomain := GetCookieDomainFromHost(*config.CookieDomain)
+		proxy.cookieDomain = &cookieDomain
 	}
-	cookieDomain = strings.Split(cookieDomain, ":")[0]
-	cookieDomain = fmt.Sprintf(".%s", cookieDomain)
-	proxy.cookieDomain = cookieDomain
 
 	proxy.apiclient = config.ApiClient
 
 	if config.Redis != nil {
 		var err error
-		proxy.runnerCache, err = common_cache.NewRedisCache[RunnerInfo](config.Redis, "proxy:sandbox-runner-info:")
+		proxy.sandboxRunnerCache, err = common_cache.NewRedisCache[RunnerInfo](config.Redis, "proxy:sandbox-runner-info:")
+		if err != nil {
+			return err
+		}
+		proxy.runnerCache, err = common_cache.NewRedisCache[RunnerInfo](config.Redis, "proxy:runner-info:")
 		if err != nil {
 			return err
 		}
@@ -89,6 +103,7 @@ func StartProxy(ctx context.Context, config *config.Config) error {
 			return err
 		}
 	} else {
+		proxy.sandboxRunnerCache = common_cache.NewMapCache[RunnerInfo]()
 		proxy.runnerCache = common_cache.NewMapCache[RunnerInfo]()
 		proxy.sandboxPublicCache = common_cache.NewMapCache[bool]()
 		proxy.sandboxAuthKeyValidCache = common_cache.NewMapCache[bool]()
@@ -100,9 +115,24 @@ func StartProxy(ctx context.Context, config *config.Config) error {
 	router := gin.New()
 	router.Use(func(ctx *gin.Context) {
 		shutdownWg.Add(1)
-		defer func() {
-			shutdownWg.Done()
-		}()
+
+		cleanupOnce := sync.Once{}
+		cleanup := func() {
+			cleanupOnce.Do(func() {
+				stopActivityPoll(ctx)
+				shutdownWg.Done()
+			})
+		}
+
+		// Wrap the response writer to monitor connection
+		monitor := &common_proxy.ConnectionMonitor{
+			ResponseWriter: ctx.Writer,
+			OnConnClosed:   cleanup,
+		}
+		ctx.Writer = monitor
+
+		// For non-WebSocket connections, cleanup on defer
+		defer cleanup()
 
 		common_errors.Recovery()(ctx)
 	})
@@ -141,18 +171,30 @@ func StartProxy(ctx context.Context, config *config.Config) error {
 			return
 		}
 
-		targetPort, _, err := proxy.parseHost(ctx.Request.Host)
+		targetPort, _, _, err := proxy.parseHost(ctx.Request.Host)
 		// if the host is not valid, we don't proxy the request
 		if err != nil {
 			switch ctx.Request.Method {
 			case "GET":
-				switch ctx.Request.URL.Path {
-				case "/callback":
-					proxy.AuthCallback(ctx)
-					return
-				case "/health":
-					ctx.JSON(http.StatusOK, gin.H{"status": "ok", "version": internal.Version})
-					return
+				{
+					switch ctx.Request.URL.Path {
+					case "/callback":
+						proxy.AuthCallback(ctx)
+						return
+					case "/health":
+						ctx.JSON(http.StatusOK, gin.H{"status": "ok", "version": internal.Version})
+						return
+					}
+
+					if regexp.MustCompile(`^/snapshots/[\w-]+/build-logs$`).MatchString(ctx.Request.URL.Path) {
+						common_proxy.NewProxyRequestHandler(proxy.getSnapshotTarget, nil)(ctx)
+						return
+					}
+
+					if regexp.MustCompile(`^/sandboxes/[\w-]+/build-logs$`).MatchString(ctx.Request.URL.Path) {
+						common_proxy.NewProxyRequestHandler(proxy.getSandboxBuildTarget, nil)(ctx)
+						return
+					}
 				}
 			}
 

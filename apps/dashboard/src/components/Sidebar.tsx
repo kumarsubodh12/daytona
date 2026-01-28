@@ -21,14 +21,16 @@ import {
 } from '@/components/ui/sidebar'
 import { DAYTONA_DOCS_URL, DAYTONA_SLACK_URL } from '@/constants/ExternalLinks'
 import { useTheme } from '@/contexts/ThemeContext'
+import { FeatureFlags } from '@/enums/FeatureFlags'
 import { RoutePath } from '@/enums/RoutePath'
+import { useConfig } from '@/hooks/useConfig'
 import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { useUserOrganizationInvitations } from '@/hooks/useUserOrganizationInvitations'
 import { useWebhooks } from '@/hooks/useWebhooks'
-import { cn } from '@/lib/utils'
+import { cn, getMetaKey } from '@/lib/utils'
 import { OrganizationRolePermissionsEnum, OrganizationUserRoleEnum } from '@daytonaio/api-client'
-import { addHours, formatRelative } from 'date-fns'
 import {
+  ArrowRightIcon,
   BookOpen,
   Box,
   ChartColumn,
@@ -41,24 +43,33 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
+  MapPinned,
   Moon,
   PackageOpen,
+  SearchIcon,
+  Server,
   Settings,
   Slack,
   SquareUserRound,
   Sun,
   TextSearch,
-  TriangleAlert,
   Users,
 } from 'lucide-react'
-import { useMemo } from 'react'
+import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
+import React, { useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import {
+  CommandConfig,
+  useCommandPaletteActions,
+  useIsCommandPaletteEnabled,
+  useRegisterCommands,
+} from './CommandPalette'
 import { Button } from './ui/button'
-import { Card, CardHeader, CardTitle } from './ui/card'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu'
+import { Kbd } from './ui/kbd'
 import { ScrollArea } from './ui/scroll-area'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip'
+
 interface SidebarProps {
   isBannerVisible: boolean
   billingEnabled: boolean
@@ -72,7 +83,29 @@ interface SidebarItem {
   onClick?: () => void
 }
 
+const useNavCommands = (items: { label: string; path: RoutePath | string; onClick?: () => void }[]) => {
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+
+  const navCommands: CommandConfig[] = useMemo(
+    () =>
+      items
+        .filter((item) => item.path !== pathname)
+        .map((item) => ({
+          id: `nav-${item.path}`,
+          label: `Go to ${item.label}`,
+          icon: <ArrowRightIcon className="w-4 h-4" />,
+          onSelect: () => navigate(item.path),
+        })),
+    [pathname, navigate, items],
+  )
+
+  useRegisterCommands(navCommands, { groupId: 'navigation', groupLabel: 'Navigation', groupOrder: 1 })
+}
+
 export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarProps) {
+  const posthog = usePostHog()
+  const config = useConfig()
   const { theme, setTheme } = useTheme()
   const { user, signoutRedirect } = useAuth()
   const { pathname } = useLocation()
@@ -81,6 +114,8 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
     useSelectedOrganization()
   const { count: organizationInvitationsCount } = useUserOrganizationInvitations()
   const { isInitialized: webhooksInitialized, openAppPortal } = useWebhooks()
+  const orgInfraEnabled = useFeatureFlagEnabled(FeatureFlags.ORGANIZATION_INFRASTRUCTURE)
+
   const sidebarItems = useMemo(() => {
     const arr: SidebarItem[] = [
       {
@@ -179,9 +214,72 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
     ]
   }, [billingEnabled, authenticatedUserOrganizationMember?.role])
 
+  const infrastructureItems = useMemo(() => {
+    if (!orgInfraEnabled) {
+      return []
+    }
+
+    const arr = [
+      {
+        icon: <MapPinned size={16} strokeWidth={1.5} />,
+        label: 'Regions',
+        path: RoutePath.REGIONS,
+      },
+    ]
+
+    if (authenticatedUserHasPermission(OrganizationRolePermissionsEnum.READ_RUNNERS)) {
+      arr.push({
+        icon: <Server size={16} strokeWidth={1.5} />,
+        label: 'Runners',
+        path: RoutePath.RUNNERS,
+      })
+    }
+
+    return arr
+  }, [authenticatedUserHasPermission, orgInfraEnabled])
+
   const handleSignOut = () => {
+    posthog?.reset()
     signoutRedirect()
   }
+
+  const sidebarGroups: { label: string; items: SidebarItem[] }[] = useMemo(() => {
+    return [
+      { label: 'Sandboxes', items: sidebarItems },
+      { label: 'Settings', items: settingsItems },
+      { label: 'Billing', items: billingItems },
+      { label: 'Infrastructure', items: infrastructureItems },
+    ].filter((group) => group.items.length > 0)
+  }, [sidebarItems, settingsItems, billingItems, infrastructureItems])
+
+  const commandItems = useMemo(() => {
+    return sidebarGroups
+      .flatMap((group) => group.items)
+      .concat(
+        {
+          path: RoutePath.ACCOUNT_SETTINGS,
+          label: 'Account Settings',
+          icon: <Settings size={16} strokeWidth={1.5} />,
+        },
+        {
+          path: RoutePath.USER_INVITATIONS,
+          label: 'Invitations',
+          icon: <Mail size={16} strokeWidth={1.5} />,
+        },
+        {
+          path: RoutePath.ONBOARDING,
+          label: 'Onboarding',
+          icon: <ListChecks size={16} strokeWidth={1.5} />,
+        },
+      )
+  }, [sidebarGroups])
+
+  const commandPaletteActions = useCommandPaletteActions()
+
+  useNavCommands(commandItems)
+
+  const cmdkEnabled = useIsCommandPaletteEnabled()
+  const metaKey = getMetaKey()
 
   return (
     <SidebarComponent isBannerVisible={isBannerVisible} collapsible="icon">
@@ -199,148 +297,62 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
         </div>
         <SidebarMenu>
           <OrganizationPicker />
+          {cmdkEnabled && (
+            <SidebarMenuItem className="mb-1">
+              <SidebarMenuButton
+                tooltip={`Search ${metaKey}+K`}
+                variant="outline"
+                className="flex items-center gap-2 justify-between dark:bg-input/30 dark:hover:bg-sidebar-accent hover:shadow-[0_0_0_1px_hsl(var(--sidebar-border))]"
+                onClick={() => commandPaletteActions.setIsOpen(true)}
+              >
+                <span className="flex items-center gap-2">
+                  <SearchIcon className="w-4 h-4" /> Search
+                </span>
+                <Kbd className="whitespace-nowrap">{metaKey} K</Kbd>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          )}
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
         <ScrollArea fade="shadow" className="overflow-auto flex-1">
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {sidebarItems.map((item) => (
-                  <SidebarMenuItem key={item.label}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.path)}
-                      className="text-sm"
-                      tooltip={item.label}
-                    >
-                      {item.onClick ? (
-                        <button onClick={() => item.onClick?.()}>
-                          {item.icon}
-                          <span>{item.label}</span>
-                        </button>
-                      ) : (
-                        <Link to={item.path}>
-                          {item.icon}
-                          <span>{item.label}</span>
-                        </Link>
-                      )}
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarSeparator />
-
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {settingsItems.map((item) => (
-                  <SidebarMenuItem key={item.label}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.path)}
-                      className="text-sm"
-                      tooltip={item.label}
-                    >
-                      <Link to={item.path}>
-                        {item.icon}
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarSeparator />
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {billingItems.map((item) => (
-                  <SidebarMenuItem key={item.label}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.path)}
-                      className="text-sm"
-                      tooltip={item.label}
-                    >
-                      <Link to={item.path}>
-                        {item.icon}
-                        <span>{item.label}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+          {sidebarGroups.map((group, i) => (
+            <React.Fragment key={group.label}>
+              {i > 0 && <SidebarSeparator />}
+              <SidebarGroup>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {group.items.map((item) => (
+                      <SidebarMenuItem key={item.label}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={pathname.startsWith(item.path)}
+                          className="text-sm"
+                          tooltip={item.label}
+                        >
+                          {item.onClick ? (
+                            <button onClick={() => item.onClick?.()}>
+                              {item.icon}
+                              <span>{item.label}</span>
+                            </button>
+                          ) : (
+                            <Link to={item.path}>
+                              {item.icon}
+                              <span>{item.label}</span>
+                            </Link>
+                          )}
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </React.Fragment>
+          ))}
         </ScrollArea>
       </SidebarContent>
       <SidebarFooter className="pb-4">
         <SidebarMenu>
-          {selectedOrganization?.suspended && (
-            <SidebarMenuItem key="suspended">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Card className="w-full m-0 p-0 mb-4 cursor-pointer border-red-600 bg-red-100/80 text-red-800 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-                      <CardHeader className="py-2 pl-2">
-                        <CardTitle className="text-sm flex items-center gap-2">
-                          <TriangleAlert className="w-4 h-4 flex-shrink-0" />
-                          <div className="overflow-hidden">
-                            Organization suspended
-                            {selectedOrganization.suspensionReason && (
-                              <div className="text-xs text-muted-foreground text-ellipsis overflow-hidden">
-                                ({selectedOrganization.suspensionReason})
-                              </div>
-                            )}
-                          </div>
-                        </CardTitle>
-                      </CardHeader>
-                    </Card>
-                  </TooltipTrigger>
-                  <TooltipContent className="mb-2 flex flex-col gap-2 max-w-[400px]" side="right">
-                    <p>
-                      <strong>Organization suspended</strong>
-                      <br />
-                      Starting and creating sandboxes is disabled.
-                    </p>
-                    {selectedOrganization.suspensionReason && (
-                      <p>
-                        <strong>Suspension reason:</strong> <br />
-                        {selectedOrganization.suspensionReason}
-                      </p>
-                    )}
-                    {selectedOrganization.suspendedAt && (
-                      <p>
-                        <strong>Suspended at:</strong> <br />
-                        {new Date(selectedOrganization.suspendedAt).toLocaleString('en-US', {
-                          timeZone: 'UTC',
-                          year: 'numeric',
-                          month: 'long',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                          second: '2-digit',
-                        })}
-                        <br />
-                        Started sandboxes will be stopped{' '}
-                        {formatRelative(
-                          addHours(
-                            new Date(selectedOrganization.suspendedAt),
-                            selectedOrganization.suspensionCleanupGracePeriodHours,
-                          ),
-                          new Date(selectedOrganization.suspendedAt),
-                        )}
-                      </p>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </SidebarMenuItem>
-          )}
           <SidebarMenuItem key="theme-toggle">
             <SidebarMenuButton
               onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -397,14 +409,16 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent side="top" align="start" className="w-[--radix-popper-anchor-width] min-w-[12rem]">
-                <DropdownMenuItem asChild>
-                  <Button variant="ghost" className="w-full cursor-pointer justify-start" asChild>
-                    <Link to={RoutePath.ACCOUNT_SETTINGS}>
-                      <Settings className="w-4 h-4" />
-                      Account Settings
-                    </Link>
-                  </Button>
-                </DropdownMenuItem>
+                {config.linkedAccountsEnabled && (
+                  <DropdownMenuItem asChild>
+                    <Button variant="ghost" className="w-full cursor-pointer justify-start" asChild>
+                      <Link to={RoutePath.ACCOUNT_SETTINGS}>
+                        <Settings className="w-4 h-4" />
+                        Account Settings
+                      </Link>
+                    </Button>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem asChild>
                   <Button variant="ghost" className="w-full cursor-pointer justify-start" asChild>
                     <Link to={RoutePath.USER_INVITATIONS}>

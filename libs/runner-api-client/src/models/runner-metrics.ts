@@ -41,6 +41,12 @@ export interface RunnerMetrics {
    * @type {number}
    * @memberof RunnerMetrics
    */
+  currentCpuLoadAverage?: number
+  /**
+   *
+   * @type {number}
+   * @memberof RunnerMetrics
+   */
   currentCpuUsagePercentage?: number
   /**
    *
@@ -60,4 +66,10 @@ export interface RunnerMetrics {
    * @memberof RunnerMetrics
    */
   currentSnapshotCount?: number
+  /**
+   *
+   * @type {number}
+   * @memberof RunnerMetrics
+   */
+  currentStartedSandboxes?: number
 }

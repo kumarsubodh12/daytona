@@ -41,18 +41,12 @@ export const RegionsApiAxiosParamCreator = function (configuration?: Configurati
   return {
     /**
      *
-     * @summary List all regions
-     * @param {string} [xDaytonaOrganizationID] Use with JWT to specify the organization ID
-     * @param {boolean} [includeShared] Include shared regions
+     * @summary List all shared regions
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    listRegions: async (
-      xDaytonaOrganizationID?: string,
-      includeShared?: boolean,
-      options: RawAxiosRequestConfig = {},
-    ): Promise<RequestArgs> => {
-      const localVarPath = `/regions`
+    listSharedRegions: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+      const localVarPath = `/shared-regions`
       // use dummy base URL string because the URL constructor only accepts absolute URLs.
       const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL)
       let baseOptions
@@ -70,13 +64,6 @@ export const RegionsApiAxiosParamCreator = function (configuration?: Configurati
 
       // authentication oauth2 required
 
-      if (includeShared !== undefined) {
-        localVarQueryParameter['includeShared'] = includeShared
-      }
-
-      if (xDaytonaOrganizationID != null) {
-        localVarHeaderParameter['X-Daytona-Organization-ID'] = String(xDaytonaOrganizationID)
-      }
       setSearchParams(localVarUrlObj, localVarQueryParameter)
       let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {}
       localVarRequestOptions.headers = { ...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers }
@@ -98,25 +85,17 @@ export const RegionsApiFp = function (configuration?: Configuration) {
   return {
     /**
      *
-     * @summary List all regions
-     * @param {string} [xDaytonaOrganizationID] Use with JWT to specify the organization ID
-     * @param {boolean} [includeShared] Include shared regions
+     * @summary List all shared regions
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    async listRegions(
-      xDaytonaOrganizationID?: string,
-      includeShared?: boolean,
+    async listSharedRegions(
       options?: RawAxiosRequestConfig,
     ): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<Array<Region>>> {
-      const localVarAxiosArgs = await localVarAxiosParamCreator.listRegions(
-        xDaytonaOrganizationID,
-        includeShared,
-        options,
-      )
+      const localVarAxiosArgs = await localVarAxiosParamCreator.listSharedRegions(options)
       const localVarOperationServerIndex = configuration?.serverIndex ?? 0
       const localVarOperationServerBasePath =
-        operationServerMap['RegionsApi.listRegions']?.[localVarOperationServerIndex]?.url
+        operationServerMap['RegionsApi.listSharedRegions']?.[localVarOperationServerIndex]?.url
       return (axios, basePath) =>
         createRequestFunction(
           localVarAxiosArgs,
@@ -137,20 +116,12 @@ export const RegionsApiFactory = function (configuration?: Configuration, basePa
   return {
     /**
      *
-     * @summary List all regions
-     * @param {string} [xDaytonaOrganizationID] Use with JWT to specify the organization ID
-     * @param {boolean} [includeShared] Include shared regions
+     * @summary List all shared regions
      * @param {*} [options] Override http request option.
      * @throws {RequiredError}
      */
-    listRegions(
-      xDaytonaOrganizationID?: string,
-      includeShared?: boolean,
-      options?: RawAxiosRequestConfig,
-    ): AxiosPromise<Array<Region>> {
-      return localVarFp
-        .listRegions(xDaytonaOrganizationID, includeShared, options)
-        .then((request) => request(axios, basePath))
+    listSharedRegions(options?: RawAxiosRequestConfig): AxiosPromise<Array<Region>> {
+      return localVarFp.listSharedRegions(options).then((request) => request(axios, basePath))
     },
   }
 }
@@ -164,16 +135,14 @@ export const RegionsApiFactory = function (configuration?: Configuration, basePa
 export class RegionsApi extends BaseAPI {
   /**
    *
-   * @summary List all regions
-   * @param {string} [xDaytonaOrganizationID] Use with JWT to specify the organization ID
-   * @param {boolean} [includeShared] Include shared regions
+   * @summary List all shared regions
    * @param {*} [options] Override http request option.
    * @throws {RequiredError}
    * @memberof RegionsApi
    */
-  public listRegions(xDaytonaOrganizationID?: string, includeShared?: boolean, options?: RawAxiosRequestConfig) {
+  public listSharedRegions(options?: RawAxiosRequestConfig) {
     return RegionsApiFp(this.configuration)
-      .listRegions(xDaytonaOrganizationID, includeShared, options)
+      .listSharedRegions(options)
       .then((request) => request(this.axios, this.basePath))
   }
 }

@@ -19,14 +19,33 @@ import '../styles/components/search.scss'
 const ALGOLIA_APP_ID = import.meta.env.PUBLIC_ALGOLIA_APP_ID || null
 const ALGOLIA_API_KEY = import.meta.env.PUBLIC_ALGOLIA_API_KEY || null
 const DOCS_INDEX_NAME =
-  import.meta.env.PUBLIC_ALGOLIA_DOCS_INDEX_NAME || 'docs_test'
-const CLI_INDEX_NAME = import.meta.env.PUBLIC_ALGOLIA_CLI_INDEX_NAME || 'cli_test'
-const SDK_INDEX_NAME = import.meta.env.PUBLIC_ALGOLIA_SDK_INDEX_NAME || 'sdk_test'
+  import.meta.env.PUBLIC_ALGOLIA_DOCS_INDEX_NAME || 'docs'
+const CLI_INDEX_NAME = import.meta.env.PUBLIC_ALGOLIA_CLI_INDEX_NAME || 'cli'
+const SDK_INDEX_NAME = import.meta.env.PUBLIC_ALGOLIA_SDK_INDEX_NAME || 'sdk'
+const API_INDEX_NAME = import.meta.env.PUBLIC_ALGOLIA_API_INDEX_NAME || 'api'
 
 const searchClient =
   ALGOLIA_APP_ID && ALGOLIA_API_KEY
     ? algoliasearch(ALGOLIA_APP_ID, ALGOLIA_API_KEY)
     : null
+
+function getSortedIndexes() {
+  const path = typeof window !== 'undefined' ? window.location.pathname : ''
+  const isApiPage = path.includes('/tools/api')
+  const isSdkPage = path.includes('/typescript-sdk') || path.includes('/python-sdk')
+  const isCliPage = path.includes('/tools/cli')
+
+  if (isApiPage) {
+    return [API_INDEX_NAME, DOCS_INDEX_NAME, CLI_INDEX_NAME, SDK_INDEX_NAME]
+  }
+  if (isSdkPage) {
+    return [SDK_INDEX_NAME, DOCS_INDEX_NAME, CLI_INDEX_NAME, API_INDEX_NAME]
+  }
+  if (isCliPage) {
+    return [CLI_INDEX_NAME, DOCS_INDEX_NAME, SDK_INDEX_NAME, API_INDEX_NAME]
+  }
+  return [DOCS_INDEX_NAME, CLI_INDEX_NAME, SDK_INDEX_NAME, API_INDEX_NAME]
+}
 
 function SearchContent() {
   const [isSearchVisible, setIsSearchVisible] = useState(false)
@@ -34,9 +53,19 @@ function SearchContent() {
   const [debounceQuery, setDebounceQuery] = useState('')
   const [displayHits, setDisplayHits] = useState(false)
   const [totalHits, setTotalHits] = useState(0)
+  const [sortedIndexes, setSortedIndexes] = useState(getSortedIndexes())
   const debounceTimeoutRef = useRef(null)
   const searchWrapperRef = useRef(null)
   const t = useGT()
+
+  const currentPath =
+    typeof window !== 'undefined' ? window.location.pathname : ''
+
+  useEffect(() => {
+    if (isSearchVisible) {
+      setSortedIndexes(getSortedIndexes())
+    }
+  }, [isSearchVisible, currentPath])
 
   useEffect(() => {
     const toggleSearch = () => {
@@ -145,30 +174,19 @@ function SearchContent() {
           <div className="search-content">
             {debounceQuery && (
               <>
-                <SearchIndex
-                  indexName={DOCS_INDEX_NAME}
-                  setDisplayHits={setDisplayHits}
-                  setIsSearchVisible={setIsSearchVisible}
-                  setTotalHits={setTotalHits}
-                  debounceQuery={debounceQuery}
-                />
-                <SearchIndex
-                  indexName={CLI_INDEX_NAME}
-                  setDisplayHits={setDisplayHits}
-                  setIsSearchVisible={setIsSearchVisible}
-                  setTotalHits={setTotalHits}
-                  debounceQuery={debounceQuery}
-                />
-                <SearchIndex
-                  indexName={SDK_INDEX_NAME}
-                  setDisplayHits={setDisplayHits}
-                  setIsSearchVisible={setIsSearchVisible}
-                  setTotalHits={setTotalHits}
-                  debounceQuery={debounceQuery}
-                />
+                {sortedIndexes.map(indexName => (
+                  <SearchIndex
+                    key={indexName}
+                    indexName={indexName}
+                    setDisplayHits={setDisplayHits}
+                    setIsSearchVisible={setIsSearchVisible}
+                    setTotalHits={setTotalHits}
+                    debounceQuery={debounceQuery}
+                  />
+                ))}
                 {totalHits === 0 && (
-                  <div style={{ 
-                    textAlign: 'center', 
+                  <div style={{
+                    textAlign: 'center',
                     padding: '20px',
                     color: 'var(--primary-text-color)',
                     fontSize: '16px'
@@ -189,7 +207,7 @@ function SearchContent() {
 function SearchIndex({ indexName, setDisplayHits, setIsSearchVisible, setTotalHits, debounceQuery }) {
   return (
     <Index indexName={indexName}>
-      <ConditionalSearchIndex 
+      <ConditionalSearchIndex
         indexName={indexName}
         setDisplayHits={setDisplayHits}
         setIsSearchVisible={setIsSearchVisible}
@@ -255,7 +273,7 @@ function Hit({ hit, setIsSearchVisible, indexName }) {
     }
 
     const currentUrl = window.location.href
-    
+
     if (currentUrl.includes(hitUrl)) {
       const element = document.querySelector(`[data-slug='${hit.slug}']`)
       if (element) {
@@ -277,7 +295,7 @@ function Hit({ hit, setIsSearchVisible, indexName }) {
       }}
     >
       <a href={hit.url} tabIndex="-1" onClick={handleClick}>
-        {([DOCS_INDEX_NAME, CLI_INDEX_NAME, SDK_INDEX_NAME].includes(indexName) || indexName === 'website') && (
+        {([DOCS_INDEX_NAME, CLI_INDEX_NAME, SDK_INDEX_NAME, API_INDEX_NAME].includes(indexName) || indexName === 'website') && (
           <>
             <h5
               style={{
@@ -340,7 +358,7 @@ function Hit({ hit, setIsSearchVisible, indexName }) {
           )}
         <p
           style={{
-            fontSize: '12px',
+            fontSize: '14px',
             paddingBottom: '16px',
             paddingLeft: '24px',
           }}
@@ -369,6 +387,8 @@ const CustomStats = ({ nbHits, indexName, setDisplayHits }) => {
         return 'CLI'
       case SDK_INDEX_NAME:
         return 'SDK'
+      case API_INDEX_NAME:
+        return 'API'
       default:
         return 'Results'
     }

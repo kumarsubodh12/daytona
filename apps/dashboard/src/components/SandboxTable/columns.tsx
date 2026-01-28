@@ -4,7 +4,7 @@
  */
 
 import { formatTimestamp, getRelativeTimeString } from '@/lib/utils'
-import { Sandbox, SandboxDesiredState } from '@daytonaio/api-client'
+import { Sandbox, SandboxDesiredState, SandboxState } from '@daytonaio/api-client'
 import { ColumnDef } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import React from 'react'
@@ -53,6 +53,7 @@ interface GetColumnsProps {
   handleCreateSshAccess: (id: string) => void
   handleRevokeSshAccess: (id: string) => void
   handleRecover: (id: string) => void
+  getRegionName: (regionId: string) => string | undefined
 }
 
 export function getColumns({
@@ -68,6 +69,7 @@ export function getColumns({
   handleCreateSshAccess,
   handleRevokeSshAccess,
   handleRecover,
+  getRegionName,
 }: GetColumnsProps): ColumnDef<Sandbox>[] {
   const handleOpenWebTerminal = async (sandboxId: string) => {
     const url = await getWebTerminalUrl(sandboxId)
@@ -85,7 +87,7 @@ export function getColumns({
           checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
           onCheckedChange={(value) => {
             for (const row of table.getRowModel().rows) {
-              if (sandboxIsLoading[row.original.id]) {
+              if (sandboxIsLoading[row.original.id] || row.original.state === SandboxState.DESTROYED) {
                 row.toggleSelected(false)
               } else {
                 row.toggleSelected(!!value)
@@ -199,7 +201,7 @@ export function getColumns({
       cell: ({ row }) => {
         return (
           <div className="w-full truncate">
-            <span className="truncate block">{row.original.target}</span>
+            <span className="truncate block">{getRegionName(row.original.target) ?? row.original.target}</span>
           </div>
         )
       },

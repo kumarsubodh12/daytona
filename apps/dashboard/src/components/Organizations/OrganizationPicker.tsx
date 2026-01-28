@@ -17,20 +17,66 @@ import { useRegions } from '@/hooks/useRegions'
 import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { handleApiError } from '@/lib/error-handling'
 import { Organization } from '@daytonaio/api-client'
-import { Building2, ChevronsUpDown, PlusCircle, SquareUserRound } from 'lucide-react'
+import { Building2, ChevronsUpDown, Copy, PlusCircle, SquareUserRound } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
+import { useCopyToClipboard } from 'usehooks-ts'
+import { CommandHighlight, useRegisterCommands, type CommandConfig } from '../CommandPalette'
 import { CreateOrganizationDialog } from './CreateOrganizationDialog'
+
+function useOrganizationCommands() {
+  const { organizations } = useOrganizations()
+  const { selectedOrganization, onSelectOrganization } = useSelectedOrganization()
+  const [, copyToClipboard] = useCopyToClipboard()
+
+  const commands: CommandConfig[] = useMemo(() => {
+    const cmds: CommandConfig[] = []
+
+    if (selectedOrganization) {
+      cmds.push({
+        id: 'copy-org-id',
+        label: 'Copy Organization ID',
+        icon: <Copy className="w-4 h-4" />,
+        onSelect: () => {
+          copyToClipboard(selectedOrganization.id)
+          toast.success('Organization ID copied to clipboard')
+        },
+      })
+    }
+
+    for (const org of organizations) {
+      if (org.id === selectedOrganization?.id) continue
+
+      cmds.push({
+        id: `switch-org-${org.id}`,
+        label: (
+          <>
+            Switch to <CommandHighlight>{org.name}</CommandHighlight>
+          </>
+        ),
+        value: `switch to organization ${org.name}`,
+        icon: <Building2 className="w-4 h-4" />,
+        onSelect: () => onSelectOrganization(org.id),
+      })
+    }
+
+    return cmds
+  }, [organizations, selectedOrganization, copyToClipboard, onSelectOrganization])
+
+  useRegisterCommands(commands, { groupId: 'organization', groupLabel: 'Organization', groupOrder: 5 })
+}
 
 export const OrganizationPicker: React.FC = () => {
   const { organizationsApi } = useApi()
 
   const { organizations, refreshOrganizations } = useOrganizations()
   const { selectedOrganization, onSelectOrganization } = useSelectedOrganization()
-  const { sharedRegions, loadingRegions, getRegionName } = useRegions()
+  const { sharedRegions: regions, loadingSharedRegions: loadingRegions, getRegionName } = useRegions()
 
   const [optimisticSelectedOrganization, setOptimisticSelectedOrganization] = useState(selectedOrganization)
   const [loadingSelectOrganization, setLoadingSelectOrganization] = useState(false)
+
+  useOrganizationCommands()
 
   useEffect(() => {
     setOptimisticSelectedOrganization(selectedOrganization)
@@ -139,7 +185,7 @@ export const OrganizationPicker: React.FC = () => {
       <CreateOrganizationDialog
         open={showCreateOrganizationDialog}
         onOpenChange={setShowCreateOrganizationDialog}
-        regions={sharedRegions}
+        regions={regions}
         loadingRegions={loadingRegions}
         getRegionName={getRegionName}
         onCreateOrganization={handleCreateOrganization}

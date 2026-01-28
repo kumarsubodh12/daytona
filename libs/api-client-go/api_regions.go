@@ -22,52 +22,38 @@ import (
 type RegionsAPI interface {
 
 	/*
-		ListRegions List all regions
+		ListSharedRegions List all shared regions
 
 		@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-		@return RegionsAPIListRegionsRequest
+		@return RegionsAPIListSharedRegionsRequest
 	*/
-	ListRegions(ctx context.Context) RegionsAPIListRegionsRequest
+	ListSharedRegions(ctx context.Context) RegionsAPIListSharedRegionsRequest
 
-	// ListRegionsExecute executes the request
+	// ListSharedRegionsExecute executes the request
 	//  @return []Region
-	ListRegionsExecute(r RegionsAPIListRegionsRequest) ([]Region, *http.Response, error)
+	ListSharedRegionsExecute(r RegionsAPIListSharedRegionsRequest) ([]Region, *http.Response, error)
 }
 
 // RegionsAPIService RegionsAPI service
 type RegionsAPIService service
 
-type RegionsAPIListRegionsRequest struct {
-	ctx                    context.Context
-	ApiService             RegionsAPI
-	xDaytonaOrganizationID *string
-	includeShared          *bool
+type RegionsAPIListSharedRegionsRequest struct {
+	ctx        context.Context
+	ApiService RegionsAPI
 }
 
-// Use with JWT to specify the organization ID
-func (r RegionsAPIListRegionsRequest) XDaytonaOrganizationID(xDaytonaOrganizationID string) RegionsAPIListRegionsRequest {
-	r.xDaytonaOrganizationID = &xDaytonaOrganizationID
-	return r
-}
-
-// Include shared regions
-func (r RegionsAPIListRegionsRequest) IncludeShared(includeShared bool) RegionsAPIListRegionsRequest {
-	r.includeShared = &includeShared
-	return r
-}
-
-func (r RegionsAPIListRegionsRequest) Execute() ([]Region, *http.Response, error) {
-	return r.ApiService.ListRegionsExecute(r)
+func (r RegionsAPIListSharedRegionsRequest) Execute() ([]Region, *http.Response, error) {
+	return r.ApiService.ListSharedRegionsExecute(r)
 }
 
 /*
-ListRegions List all regions
+ListSharedRegions List all shared regions
 
 	@param ctx context.Context - for authentication, logging, cancellation, deadlines, tracing, etc. Passed from http.Request or context.Background().
-	@return RegionsAPIListRegionsRequest
+	@return RegionsAPIListSharedRegionsRequest
 */
-func (a *RegionsAPIService) ListRegions(ctx context.Context) RegionsAPIListRegionsRequest {
-	return RegionsAPIListRegionsRequest{
+func (a *RegionsAPIService) ListSharedRegions(ctx context.Context) RegionsAPIListSharedRegionsRequest {
+	return RegionsAPIListSharedRegionsRequest{
 		ApiService: a,
 		ctx:        ctx,
 	}
@@ -76,7 +62,7 @@ func (a *RegionsAPIService) ListRegions(ctx context.Context) RegionsAPIListRegio
 // Execute executes the request
 //
 //	@return []Region
-func (a *RegionsAPIService) ListRegionsExecute(r RegionsAPIListRegionsRequest) ([]Region, *http.Response, error) {
+func (a *RegionsAPIService) ListSharedRegionsExecute(r RegionsAPIListSharedRegionsRequest) ([]Region, *http.Response, error) {
 	var (
 		localVarHTTPMethod  = http.MethodGet
 		localVarPostBody    interface{}
@@ -84,20 +70,17 @@ func (a *RegionsAPIService) ListRegionsExecute(r RegionsAPIListRegionsRequest) (
 		localVarReturnValue []Region
 	)
 
-	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "RegionsAPIService.ListRegions")
+	localBasePath, err := a.client.cfg.ServerURLWithContext(r.ctx, "RegionsAPIService.ListSharedRegions")
 	if err != nil {
 		return localVarReturnValue, nil, &GenericOpenAPIError{error: err.Error()}
 	}
 
-	localVarPath := localBasePath + "/regions"
+	localVarPath := localBasePath + "/shared-regions"
 
 	localVarHeaderParams := make(map[string]string)
 	localVarQueryParams := url.Values{}
 	localVarFormParams := url.Values{}
 
-	if r.includeShared != nil {
-		parameterAddToHeaderOrQuery(localVarQueryParams, "includeShared", r.includeShared, "form", "")
-	}
 	// to determine the Content-Type header
 	localVarHTTPContentTypes := []string{}
 
@@ -114,9 +97,6 @@ func (a *RegionsAPIService) ListRegionsExecute(r RegionsAPIListRegionsRequest) (
 	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
 	if localVarHTTPHeaderAccept != "" {
 		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
-	}
-	if r.xDaytonaOrganizationID != nil {
-		parameterAddToHeaderOrQuery(localVarHeaderParams, "X-Daytona-Organization-ID", r.xDaytonaOrganizationID, "simple", "")
 	}
 	req, err := a.client.prepareRequest(r.ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, formFiles)
 	if err != nil {

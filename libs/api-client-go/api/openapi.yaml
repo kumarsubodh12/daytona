@@ -1081,7 +1081,7 @@ paths:
         - organizations
   /regions:
     get:
-      operationId: listRegions
+      operationId: listAvailableRegions
       parameters:
         - description: Use with JWT to specify the organization ID
           explode: false
@@ -1091,14 +1091,6 @@ paths:
           schema:
             type: string
           style: simple
-        - description: Include shared regions
-          explode: true
-          in: query
-          name: includeShared
-          required: false
-          schema:
-            type: boolean
-          style: form
       responses:
         '200':
           content:
@@ -1107,16 +1099,261 @@ paths:
                 items:
                   $ref: '#/components/schemas/Region'
                 type: array
-          description: List of all regions
+          description: List of all available regions
       security:
         - bearer: []
         - oauth2:
             - openid
             - profile
             - email
-      summary: List all regions
+      summary: List all available regions for the organization
       tags:
-        - regions
+        - organizations
+    post:
+      operationId: createRegion
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRegion'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRegionResponse'
+          description: The region has been successfully created.
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Create a new region
+      tags:
+        - organizations
+  /regions/{id}:
+    delete:
+      operationId: deleteRegion
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Region ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '204':
+          description: The region has been successfully deleted.
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Delete a region
+      tags:
+        - organizations
+    get:
+      operationId: getRegionById
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Region ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Region'
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get region by ID
+      tags:
+        - organizations
+    patch:
+      operationId: updateRegion
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Region ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRegion'
+        required: true
+      responses:
+        '200':
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Update region configuration
+      tags:
+        - organizations
+  /regions/{id}/regenerate-proxy-api-key:
+    post:
+      operationId: regenerateProxyApiKey
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Region ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegenerateApiKeyResponse'
+          description: The proxy API key has been successfully regenerated.
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Regenerate proxy API key for a region
+      tags:
+        - organizations
+  /regions/{id}/regenerate-ssh-gateway-api-key:
+    post:
+      operationId: regenerateSshGatewayApiKey
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Region ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegenerateApiKeyResponse'
+          description: The SSH gateway API key has been successfully regenerated.
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Regenerate SSH gateway API key for a region
+      tags:
+        - organizations
+  /regions/{id}/regenerate-snapshot-manager-credentials:
+    post:
+      operationId: regenerateSnapshotManagerCredentials
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Region ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotManagerCredentials'
+          description: The snapshot manager credentials have been successfully regenerated.
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Regenerate snapshot manager credentials for a region
+      tags:
+        - organizations
   /users/me:
     get:
       operationId: getAuthenticatedUser
@@ -1318,6 +1555,28 @@ paths:
       summary: Get user by ID
       tags:
         - users
+  /shared-regions:
+    get:
+      operationId: listSharedRegions
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Region'
+                type: array
+          description: List of all shared regions
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: List all shared regions
+      tags:
+        - regions
   /sandbox:
     get:
       operationId: listSandboxes
@@ -2279,8 +2538,110 @@ paths:
       summary: Get preview URL for a sandbox port
       tags:
         - sandbox
+  /sandbox/{sandboxIdOrName}/ports/{port}/signed-preview-url:
+    get:
+      operationId: getSignedPortPreviewUrl
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: ID or name of the sandbox
+          explode: false
+          in: path
+          name: sandboxIdOrName
+          required: true
+          schema:
+            type: string
+          style: simple
+        - description: Port number to get signed preview URL for
+          explode: false
+          in: path
+          name: port
+          required: true
+          schema:
+            type: integer
+          style: simple
+        - description: 'Expiration time in seconds (default: 60 seconds)'
+          explode: true
+          in: query
+          name: expiresInSeconds
+          required: false
+          schema:
+            type: integer
+          style: form
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignedPortPreviewUrl'
+          description: Signed preview URL for the specified port
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get signed preview URL for a sandbox port
+      tags:
+        - sandbox
+  /sandbox/{sandboxIdOrName}/ports/{port}/signed-preview-url/{token}/expire:
+    post:
+      operationId: expireSignedPortPreviewUrl
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: ID or name of the sandbox
+          explode: false
+          in: path
+          name: sandboxIdOrName
+          required: true
+          schema:
+            type: string
+          style: simple
+        - description: Port number to expire signed preview URL for
+          explode: false
+          in: path
+          name: port
+          required: true
+          schema:
+            type: integer
+          style: simple
+        - description: Token to expire signed preview URL for
+          explode: false
+          in: path
+          name: token
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          description: Signed preview URL has been expired
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Expire signed preview URL for a sandbox port
+      tags:
+        - sandbox
   /sandbox/{sandboxIdOrName}/build-logs:
     get:
+      deprecated: true
+      description: This endpoint is deprecated. Use `getBuildLogsUrl` instead.
       operationId: getBuildLogs
       parameters:
         - description: Use with JWT to specify the organization ID
@@ -2317,6 +2678,42 @@ paths:
             - profile
             - email
       summary: Get build logs
+      tags:
+        - sandbox
+  /sandbox/{sandboxIdOrName}/build-logs-url:
+    get:
+      operationId: getBuildLogsUrl
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: ID or name of the sandbox
+          explode: false
+          in: path
+          name: sandboxIdOrName
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Url'
+          description: Build logs URL
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get build logs URL
       tags:
         - sandbox
   /sandbox/{sandboxIdOrName}/ssh-access:
@@ -2443,12 +2840,62 @@ paths:
       summary: Validate SSH access for sandbox
       tags:
         - sandbox
+  /sandbox/{sandboxId}/toolbox-proxy-url:
+    get:
+      operationId: getToolboxProxyUrl
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: ID of the sandbox
+          explode: false
+          in: path
+          name: sandboxId
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolboxProxyUrl'
+          description: Toolbox proxy URL for the specified sandbox
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get toolbox proxy URL for a sandbox
+      tags:
+        - sandbox
   /runners:
     get:
       operationId: listRunners
-      parameters: []
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/Runner'
+                type: array
           description: ''
       security:
         - bearer: []
@@ -2461,7 +2908,15 @@ paths:
         - runners
     post:
       operationId: createRunner
-      parameters: []
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
       requestBody:
         content:
           application/json:
@@ -2470,6 +2925,10 @@ paths:
         required: true
       responses:
         '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRunnerResponse'
           description: ''
       security:
         - bearer: []
@@ -2489,7 +2948,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Runner'
+                $ref: '#/components/schemas/RunnerFull'
           description: Runner info
       security:
         - bearer: []
@@ -2500,11 +2959,79 @@ paths:
       summary: Get info for authenticated runner
       tags:
         - runners
-  /runners/{id}/scheduling:
-    patch:
-      operationId: updateRunnerScheduling
+  /runners/{id}:
+    delete:
+      operationId: deleteRunner
       parameters:
-        - explode: false
+        - description: Runner ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Delete runner
+      tags:
+        - runners
+    get:
+      operationId: getRunnerById
+      parameters:
+        - description: Runner ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runner'
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get runner by ID
+      tags:
+        - runners
+  /runners/{id}/full:
+    get:
+      operationId: getRunnerFullById
+      parameters:
+        - description: Runner ID
+          explode: false
           in: path
           name: id
           required: true
@@ -2513,6 +3040,46 @@ paths:
           style: simple
       responses:
         '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunnerFull'
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get runner by ID
+      tags:
+        - runners
+  /runners/{id}/scheduling:
+    patch:
+      operationId: updateRunnerScheduling
+      parameters:
+        - description: Runner ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Runner'
           description: ''
       security:
         - bearer: []
@@ -2539,8 +3106,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Runner'
-          description: Runner found
+                $ref: '#/components/schemas/RunnerFull'
+          description: ''
       security:
         - bearer: []
         - oauth2:
@@ -2570,7 +3137,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/RunnerSnapshotDto'
                 type: array
-          description: Runners found for the snapshot
+          description: ''
       security:
         - bearer: []
         - oauth2:
@@ -2578,6 +3145,30 @@ paths:
             - profile
             - email
       summary: Get runners by snapshot ref
+      tags:
+        - runners
+  /runners/healthcheck:
+    post:
+      description: Endpoint for version 2 runners to send healthcheck and metrics.
+        Updates lastChecked timestamp and runner metrics.
+      operationId: runnerHealthcheck
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunnerHealthcheck'
+        required: true
+      responses:
+        '200':
+          description: Healthcheck received
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Runner healthcheck
       tags:
         - runners
   /toolbox/{sandboxId}/toolbox/project-dir:
@@ -5884,6 +6475,8 @@ paths:
         - snapshots
   /snapshots/{id}/build-logs:
     get:
+      deprecated: true
+      description: This endpoint is deprecated. Use `getSnapshotBuildLogsUrl` instead.
       operationId: getSnapshotBuildLogs
       parameters:
         - description: Use with JWT to specify the organization ID
@@ -5920,6 +6513,42 @@ paths:
             - profile
             - email
       summary: Get snapshot build logs
+      tags:
+        - snapshots
+  /snapshots/{id}/build-logs-url:
+    get:
+      operationId: getSnapshotBuildLogsUrl
+      parameters:
+        - description: Use with JWT to specify the organization ID
+          explode: false
+          in: header
+          name: X-Daytona-Organization-ID
+          required: false
+          schema:
+            type: string
+          style: simple
+        - description: Snapshot ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Url'
+          description: The snapshot build logs URL
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get snapshot build logs URL
       tags:
         - snapshots
   /snapshots/{id}/activate:
@@ -6628,6 +7257,36 @@ paths:
       summary: Check if user has access to the sandbox
       tags:
         - preview
+  /preview/{signedPreviewToken}/{port}/sandbox-id:
+    get:
+      operationId: getSandboxIdFromSignedPreviewUrlToken
+      parameters:
+        - description: Signed preview URL token
+          explode: false
+          in: path
+          name: signedPreviewToken
+          required: true
+          schema:
+            type: string
+          style: simple
+        - description: Port number to get sandbox ID from signed preview URL token
+          explode: false
+          in: path
+          name: port
+          required: true
+          schema:
+            type: number
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: string
+          description: Sandbox ID from signed preview URL token
+      summary: Get sandbox ID from signed preview URL token
+      tags:
+        - preview
   /volumes:
     get:
       operationId: listVolumes
@@ -6802,6 +7461,165 @@ paths:
       summary: Get volume details by name
       tags:
         - volumes
+  /jobs:
+    get:
+      description: "Returns a paginated list of jobs for the runner, optionally filtered\
+        \ by status."
+      operationId: listJobs
+      parameters:
+        - description: Page number of the results
+          explode: true
+          in: query
+          name: page
+          required: false
+          schema:
+            default: 1
+            minimum: 1
+            type: number
+          style: form
+        - description: 'Maximum number of jobs to return (default: 100, max: 500)'
+          explode: true
+          in: query
+          name: limit
+          required: false
+          schema:
+            default: 100
+            maximum: 200
+            minimum: 1
+            type: number
+          style: form
+        - description: Filter jobs by status
+          explode: true
+          in: query
+          name: status
+          required: false
+          schema:
+            $ref: '#/components/schemas/JobStatus'
+          style: form
+        - description: 'Number of jobs to skip for pagination (default: 0)'
+          explode: true
+          in: query
+          name: offset
+          required: false
+          schema:
+            type: number
+          style: form
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedJobs'
+          description: List of jobs for the runner
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: List jobs for the runner
+      tags:
+        - jobs
+  /jobs/poll:
+    get:
+      description: "Long poll endpoint for runners to fetch pending jobs. Returns\
+        \ immediately if jobs are available, otherwise waits up to timeout seconds."
+      operationId: pollJobs
+      parameters:
+        - description: 'Timeout in seconds for long polling (default: 30, max: 60)'
+          explode: true
+          in: query
+          name: timeout
+          required: false
+          schema:
+            type: number
+          style: form
+        - description: 'Maximum number of jobs to return (default: 10, max: 100)'
+          explode: true
+          in: query
+          name: limit
+          required: false
+          schema:
+            type: number
+          style: form
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PollJobsResponse'
+          description: List of jobs for the runner
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Long poll for jobs
+      tags:
+        - jobs
+  /jobs/{jobId}:
+    get:
+      operationId: getJob
+      parameters:
+        - description: ID of the job
+          explode: false
+          in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: Job details
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get job details
+      tags:
+        - jobs
+  /jobs/{jobId}/status:
+    post:
+      operationId: updateJobStatus
+      parameters:
+        - description: ID of the job
+          explode: false
+          in: path
+          name: jobId
+          required: true
+          schema:
+            type: string
+          style: simple
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateJobStatus'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+          description: Job status updated successfully
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Update job status
+      tags:
+        - jobs
   /docker-registry:
     get:
       operationId: listRegistries
@@ -6877,6 +7695,15 @@ paths:
           schema:
             type: string
           style: simple
+        - description: ID of the region where the snapshot will be available (defaults
+            to organization default region)
+          explode: true
+          in: query
+          name: regionId
+          required: false
+          schema:
+            type: string
+          style: form
       responses:
         '200':
           content:
@@ -7037,6 +7864,135 @@ paths:
       summary: Set default registry
       tags:
         - docker-registry
+  /admin/runners:
+    get:
+      operationId: adminListRunners
+      parameters:
+        - description: Filter runners by region ID
+          explode: true
+          in: query
+          name: regionId
+          required: false
+          schema:
+            type: string
+          style: form
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: '#/components/schemas/RunnerFull'
+                type: array
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: List all runners
+      tags:
+        - admin
+    post:
+      operationId: adminCreateRunner
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateRunner'
+        required: true
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateRunnerResponse'
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Create runner
+      tags:
+        - admin
+  /admin/runners/{id}:
+    delete:
+      operationId: adminDeleteRunner
+      parameters:
+        - description: Runner ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Delete runner
+      tags:
+        - admin
+    get:
+      operationId: adminGetRunnerById
+      parameters:
+        - description: Runner ID
+          explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunnerFull'
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Get runner by ID
+      tags:
+        - admin
+  /admin/runners/{id}/scheduling:
+    patch:
+      operationId: adminUpdateRunnerScheduling
+      parameters:
+        - explode: false
+          in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          style: simple
+      responses:
+        '204':
+          description: ''
+      security:
+        - bearer: []
+        - oauth2:
+            - openid
+            - profile
+            - email
+      summary: Update runner scheduling status
+      tags:
+        - admin
   /webhooks/organizations/{organizationId}/app-portal-access:
     post:
       operationId: WebhookController_getAppPortalAccess
@@ -7633,6 +8589,11 @@ components:
               - read:volumes
               - write:volumes
               - delete:volumes
+              - write:regions
+              - delete:regions
+              - read:runners
+              - write:runners
+              - delete:runners
               - read:audit_logs
             type: string
           type: array
@@ -7683,6 +8644,11 @@ components:
               - read:volumes
               - write:volumes
               - delete:volumes
+              - write:regions
+              - delete:regions
+              - read:runners
+              - write:runners
+              - delete:runners
               - read:audit_logs
             type: string
           type: array
@@ -7738,6 +8704,11 @@ components:
               - read:volumes
               - write:volumes
               - delete:volumes
+              - write:regions
+              - delete:regions
+              - read:runners
+              - write:runners
+              - delete:runners
               - read:audit_logs
             type: string
           type: array
@@ -7800,6 +8771,11 @@ components:
               - read:volumes
               - write:volumes
               - delete:volumes
+              - write:regions
+              - delete:regions
+              - read:runners
+              - write:runners
+              - delete:runners
               - read:audit_logs
             type: string
           type: array
@@ -8277,6 +9253,11 @@ components:
               - read:volumes
               - write:volumes
               - delete:volumes
+              - write:regions
+              - delete:regions
+              - read:runners
+              - write:runners
+              - delete:runners
               - read:audit_logs
             type: string
           type: array
@@ -8314,6 +9295,11 @@ components:
               - read:volumes
               - write:volumes
               - delete:volumes
+              - write:regions
+              - delete:regions
+              - read:runners
+              - write:runners
+              - delete:runners
               - read:audit_logs
             type: string
           type: array
@@ -8482,11 +9468,22 @@ components:
         - assignedRoleIds
         - role
       type: object
+    RegionType:
+      description: The type of the region
+      enum:
+        - shared
+        - dedicated
+        - custom
+      type: string
     Region:
       example:
         organizationId: 123e4567-e89b-12d3-a456-426614174000
         createdAt: 2023-01-01T00:00:00.000Z
+        snapshotManagerUrl: http://snapshot-manager.example.com
+        regionType: shared
+        proxyUrl: https://proxy.example.com
         name: us-east-1
+        sshGatewayUrl: http://ssh-gateway.example.com
         id: '123456789012'
         updatedAt: 2023-01-01T00:00:00.000Z
       properties:
@@ -8503,6 +9500,11 @@ components:
           example: 123e4567-e89b-12d3-a456-426614174000
           nullable: true
           type: string
+        regionType:
+          allOf:
+            - $ref: '#/components/schemas/RegionType'
+          description: The type of the region
+          example: shared
         createdAt:
           description: Creation timestamp
           example: 2023-01-01T00:00:00.000Z
@@ -8511,11 +9513,139 @@ components:
           description: Last update timestamp
           example: 2023-01-01T00:00:00.000Z
           type: string
+        proxyUrl:
+          description: Proxy URL for the region
+          example: https://proxy.example.com
+          nullable: true
+          type: string
+        sshGatewayUrl:
+          description: SSH Gateway URL for the region
+          example: http://ssh-gateway.example.com
+          nullable: true
+          type: string
+        snapshotManagerUrl:
+          description: Snapshot Manager URL for the region
+          example: http://snapshot-manager.example.com
+          nullable: true
+          type: string
       required:
         - createdAt
         - id
         - name
+        - regionType
         - updatedAt
+      type: object
+    CreateRegion:
+      example:
+        snapshotManagerUrl: https://snapshot-manager.example.com
+        proxyUrl: https://proxy.example.com
+        name: us-east-1
+        sshGatewayUrl: ssh://ssh-gateway.example.com
+      properties:
+        name:
+          description: Region name
+          example: us-east-1
+          type: string
+        proxyUrl:
+          description: Proxy URL for the region
+          example: https://proxy.example.com
+          nullable: true
+          type: string
+        sshGatewayUrl:
+          description: SSH Gateway URL for the region
+          example: ssh://ssh-gateway.example.com
+          nullable: true
+          type: string
+        snapshotManagerUrl:
+          description: Snapshot Manager URL for the region
+          example: https://snapshot-manager.example.com
+          nullable: true
+          type: string
+      required:
+        - name
+      type: object
+    CreateRegionResponse:
+      example:
+        proxyApiKey: proxy-api-key-xyz
+        snapshotManagerUsername: daytona
+        snapshotManagerPassword: snapshotManagerPassword
+        id: region_12345
+        sshGatewayApiKey: ssh-gateway-api-key-abc
+      properties:
+        id:
+          description: ID of the created region
+          example: region_12345
+          type: string
+        proxyApiKey:
+          description: Proxy API key for the region
+          example: proxy-api-key-xyz
+          nullable: true
+          type: string
+        sshGatewayApiKey:
+          description: SSH Gateway API key for the region
+          example: ssh-gateway-api-key-abc
+          nullable: true
+          type: string
+        snapshotManagerUsername:
+          description: Snapshot Manager username for the region
+          example: daytona
+          nullable: true
+          type: string
+        snapshotManagerPassword:
+          description: Snapshot Manager password for the region
+          nullable: true
+          type: string
+      required:
+        - id
+      type: object
+    RegenerateApiKeyResponse:
+      example:
+        apiKey: api-key-xyz123
+      properties:
+        apiKey:
+          description: The newly generated API key
+          example: api-key-xyz123
+          type: string
+      required:
+        - apiKey
+      type: object
+    UpdateRegion:
+      example:
+        snapshotManagerUrl: https://snapshot-manager.example.com
+        proxyUrl: https://proxy.example.com
+        sshGatewayUrl: ssh://ssh-gateway.example.com
+      properties:
+        proxyUrl:
+          description: Proxy URL for the region
+          example: https://proxy.example.com
+          nullable: true
+          type: string
+        sshGatewayUrl:
+          description: SSH Gateway URL for the region
+          example: ssh://ssh-gateway.example.com
+          nullable: true
+          type: string
+        snapshotManagerUrl:
+          description: Snapshot Manager URL for the region
+          example: https://snapshot-manager.example.com
+          nullable: true
+          type: string
+      type: object
+    SnapshotManagerCredentials:
+      example:
+        password: password
+        username: daytona
+      properties:
+        username:
+          description: Snapshot Manager username for the region
+          example: daytona
+          type: string
+        password:
+          description: Snapshot Manager password for the region
+          type: string
+      required:
+        - password
+        - username
       type: object
     UserPublicKey:
       example:
@@ -8748,8 +9878,13 @@ components:
           description: The last update timestamp
           format: date-time
           type: string
+        snapshotRef:
+          description: The snapshot reference
+          example: daytonaio/sandbox:latest
+          type: string
       required:
         - createdAt
+        - snapshotRef
         - updatedAt
       type: object
     Sandbox:
@@ -8763,6 +9898,7 @@ components:
         autoDeleteInterval: 30
         public: false
         errorReason: The sandbox is not running
+        runnerId: runner123
         id: sandbox123
         state: creating
         class: small
@@ -8935,6 +10071,10 @@ components:
           description: The version of the daemon running in the sandbox
           example: 1.0.0
           type: string
+        runnerId:
+          description: The runner ID of the sandbox
+          example: runner123
+          type: string
       required:
         - cpu
         - disk
@@ -8965,6 +10105,7 @@ components:
             autoDeleteInterval: 30
             public: false
             errorReason: The sandbox is not running
+            runnerId: runner123
             id: sandbox123
             state: creating
             class: small
@@ -9003,6 +10144,7 @@ components:
             autoDeleteInterval: 30
             public: false
             errorReason: The sandbox is not running
+            runnerId: runner123
             id: sandbox123
             state: creating
             class: small
@@ -9213,6 +10355,7 @@ components:
     UpdateSandboxStateDto:
       example:
         errorReason: Failed to pull snapshot image
+        recoverable: true
         state: started
       properties:
         state:
@@ -9240,13 +10383,17 @@ components:
           description: Optional error message when reporting an error state
           example: Failed to pull snapshot image
           type: string
+        recoverable:
+          description: Whether the sandbox is recoverable
+          example: true
+          type: boolean
       required:
         - state
       type: object
     PortPreviewUrl:
       example:
         sandboxId: '123456'
-        url: https://123456-mysandbox.runner.com
+        url: 'https://{port}-{sandboxId}.{proxyDomain}'
         token: ul67qtv-jl6wb9z5o3eii-ljqt9qed6l
       properties:
         sandboxId:
@@ -9255,7 +10402,7 @@ components:
           type: string
         url:
           description: Preview url
-          example: https://123456-mysandbox.runner.com
+          example: 'https://{port}-{sandboxId}.{proxyDomain}'
           type: string
         token:
           description: Access token
@@ -9266,9 +10413,49 @@ components:
         - token
         - url
       type: object
+    SignedPortPreviewUrl:
+      example:
+        port: 3000
+        sandboxId: '123456'
+        url: 'https://{port}-{token}.{proxyDomain}'
+        token: jl6wb9z5o3eii
+      properties:
+        sandboxId:
+          description: ID of the sandbox
+          example: '123456'
+          type: string
+        port:
+          description: Port number of the signed preview URL
+          example: 3000
+          type: integer
+        token:
+          description: Token of the signed preview URL
+          example: jl6wb9z5o3eii
+          type: string
+        url:
+          description: Signed preview url
+          example: 'https://{port}-{token}.{proxyDomain}'
+          type: string
+      required:
+        - port
+        - sandboxId
+        - token
+        - url
+      type: object
+    Url:
+      example:
+        url: url
+      properties:
+        url:
+          description: URL response
+          type: string
+      required:
+        - url
+      type: object
     SshAccessDto:
       example:
         createdAt: 2025-01-01T11:00:00Z
+        sshCommand: ssh -p 2222 token@localhost
         sandboxId: 123e4567-e89b-12d3-a456-426614174000
         id: 123e4567-e89b-12d3-a456-426614174000
         expiresAt: 2025-01-01T12:00:00Z
@@ -9302,11 +10489,16 @@ components:
           example: 2025-01-01T11:00:00Z
           format: date-time
           type: string
+        sshCommand:
+          description: SSH command to connect to the sandbox
+          example: ssh -p 2222 token@localhost
+          type: string
       required:
         - createdAt
         - expiresAt
         - id
         - sandboxId
+        - sshCommand
         - token
         - updatedAt
       type: object
@@ -9327,64 +10519,46 @@ components:
         - sandboxId
         - valid
       type: object
+    ToolboxProxyUrl:
+      example:
+        url: https://proxy.app.daytona.io/toolbox
+      properties:
+        url:
+          description: The toolbox proxy URL for the sandbox
+          example: https://proxy.app.daytona.io/toolbox
+          type: string
+      required:
+        - url
+      type: object
     CreateRunner:
       example:
-        diskGiB: 1.4658129805029452
-        apiUrl: apiUrl
-        apiKey: apiKey
-        proxyUrl: proxyUrl
-        memoryGiB: 6.027456183070403
-        domain: domain
-        cpu: 0.8008281904610115
-        region: us
-        gpu: 5.962133916683182
-        class: small
-        version: version
-        gpuType: gpuType
+        regionId: regionId
+        name: name
       properties:
-        domain:
+        regionId:
           type: string
-        apiUrl:
+        name:
           type: string
-        proxyUrl:
+      required:
+        - name
+        - regionId
+      type: object
+    CreateRunnerResponse:
+      example:
+        apiKey: dtn_1234567890
+        id: runner123
+      properties:
+        id:
+          description: The ID of the runner
+          example: runner123
           type: string
         apiKey:
-          type: string
-        cpu:
-          type: number
-        memoryGiB:
-          type: number
-        diskGiB:
-          type: number
-        gpu:
-          type: number
-        gpuType:
-          type: string
-        class:
-          enum:
-            - small
-            - medium
-            - large
-          example: small
-          type: string
-        region:
-          example: us
-          type: string
-        version:
+          description: The API key for the runner
+          example: dtn_1234567890
           type: string
       required:
         - apiKey
-        - apiUrl
-        - class
-        - cpu
-        - diskGiB
-        - domain
-        - gpu
-        - gpuType
-        - memoryGiB
-        - proxyUrl
-        - region
-        - version
+        - id
       type: object
     SandboxClass:
       description: The class of the runner
@@ -9402,16 +10576,20 @@ components:
         - decommissioned
         - unresponsive
       type: string
-    Runner:
+    RunnerFull:
       example:
+        currentStartedSandboxes: 5
+        appVersion: v0.0.0-dev
         memory: 16
-        apiKey: api-key-123
         currentMemoryUsagePercentage: 68.2
+        apiKey: dtn_1234567890
         availabilityScore: 85
         currentDiskUsagePercentage: 33.8
         currentCpuUsagePercentage: 45.6
         createdAt: 2023-10-01T12:00:00Z
+        apiVersion: '0'
         apiUrl: https://api.runner1.example.com
+        regionType: shared
         id: runner123
         state: initializing
         unschedulable: false
@@ -9428,6 +10606,7 @@ components:
         version: '0'
         disk: 100
         domain: runner1.example.com
+        name: runner1
         region: us
         lastChecked: 2024-10-01T12:00:00Z
       properties:
@@ -9446,10 +10625,6 @@ components:
         proxyUrl:
           description: The proxy URL of the runner
           example: https://proxy.runner1.example.com
-          type: string
-        apiKey:
-          description: The API key for the runner
-          example: api-key-123
           type: string
         cpu:
           description: The CPU capacity of the runner
@@ -9503,6 +10678,10 @@ components:
           description: Current snapshot count
           example: 12
           type: number
+        currentStartedSandboxes:
+          description: Current number of started sandboxes
+          example: 5
+          type: number
         availabilityScore:
           description: Runner availability score
           example: 85
@@ -9510,6 +10689,10 @@ components:
         region:
           description: The region of the runner
           example: us
+          type: string
+        name:
+          description: The name of the runner
+          example: runner1
           type: string
         state:
           allOf:
@@ -9533,22 +10716,206 @@ components:
           example: 2023-10-01T12:00:00Z
           type: string
         version:
-          description: The version of the runner
+          deprecated: true
+          description: The version of the runner (deprecated in favor of apiVersion)
           example: '0'
           type: string
+        apiVersion:
+          deprecated: true
+          description: The api version of the runner
+          example: '0'
+          type: string
+        appVersion:
+          deprecated: true
+          description: The app version of the runner
+          example: v0.0.0-dev
+          type: string
+        apiKey:
+          description: The API key for the runner
+          example: dtn_1234567890
+          type: string
+        regionType:
+          allOf:
+            - $ref: '#/components/schemas/RegionType'
+          description: The region type of the runner
+          example: shared
       required:
         - apiKey
-        - apiUrl
+        - apiVersion
         - class
         - cpu
         - createdAt
         - disk
-        - domain
-        - gpu
-        - gpuType
         - id
         - memory
-        - proxyUrl
+        - name
+        - region
+        - state
+        - unschedulable
+        - updatedAt
+        - version
+      type: object
+    Runner:
+      example:
+        currentStartedSandboxes: 5
+        appVersion: v0.0.0-dev
+        memory: 16
+        currentMemoryUsagePercentage: 68.2
+        availabilityScore: 85
+        currentDiskUsagePercentage: 33.8
+        currentCpuUsagePercentage: 45.6
+        createdAt: 2023-10-01T12:00:00Z
+        apiVersion: '0'
+        apiUrl: https://api.runner1.example.com
+        id: runner123
+        state: initializing
+        unschedulable: false
+        class: small
+        currentAllocatedDiskGiB: 50000
+        currentAllocatedMemoryGiB: 8000
+        gpuType: gpuType
+        currentAllocatedCpu: 4000
+        updatedAt: 2023-10-01T12:00:00Z
+        proxyUrl: https://proxy.runner1.example.com
+        cpu: 8
+        gpu: 1
+        currentSnapshotCount: 12
+        version: '0'
+        disk: 100
+        domain: runner1.example.com
+        name: runner1
+        region: us
+        lastChecked: 2024-10-01T12:00:00Z
+      properties:
+        id:
+          description: The ID of the runner
+          example: runner123
+          type: string
+        domain:
+          description: The domain of the runner
+          example: runner1.example.com
+          type: string
+        apiUrl:
+          description: The API URL of the runner
+          example: https://api.runner1.example.com
+          type: string
+        proxyUrl:
+          description: The proxy URL of the runner
+          example: https://proxy.runner1.example.com
+          type: string
+        cpu:
+          description: The CPU capacity of the runner
+          example: 8
+          type: number
+        memory:
+          description: The memory capacity of the runner in GiB
+          example: 16
+          type: number
+        disk:
+          description: The disk capacity of the runner in GiB
+          example: 100
+          type: number
+        gpu:
+          description: The GPU capacity of the runner
+          example: 1
+          type: number
+        gpuType:
+          description: The type of GPU
+          type: string
+        class:
+          allOf:
+            - $ref: '#/components/schemas/SandboxClass'
+          description: The class of the runner
+          example: small
+        currentCpuUsagePercentage:
+          description: Current CPU usage percentage
+          example: 45.6
+          type: number
+        currentMemoryUsagePercentage:
+          description: Current RAM usage percentage
+          example: 68.2
+          type: number
+        currentDiskUsagePercentage:
+          description: Current disk usage percentage
+          example: 33.8
+          type: number
+        currentAllocatedCpu:
+          description: Current allocated CPU
+          example: 4000
+          type: number
+        currentAllocatedMemoryGiB:
+          description: Current allocated memory in GiB
+          example: 8000
+          type: number
+        currentAllocatedDiskGiB:
+          description: Current allocated disk in GiB
+          example: 50000
+          type: number
+        currentSnapshotCount:
+          description: Current snapshot count
+          example: 12
+          type: number
+        currentStartedSandboxes:
+          description: Current number of started sandboxes
+          example: 5
+          type: number
+        availabilityScore:
+          description: Runner availability score
+          example: 85
+          type: number
+        region:
+          description: The region of the runner
+          example: us
+          type: string
+        name:
+          description: The name of the runner
+          example: runner1
+          type: string
+        state:
+          allOf:
+            - $ref: '#/components/schemas/RunnerState'
+          description: The state of the runner
+          example: initializing
+        lastChecked:
+          description: The last time the runner was checked
+          example: 2024-10-01T12:00:00Z
+          type: string
+        unschedulable:
+          description: Whether the runner is unschedulable
+          example: false
+          type: boolean
+        createdAt:
+          description: The creation timestamp of the runner
+          example: 2023-10-01T12:00:00Z
+          type: string
+        updatedAt:
+          description: The last update timestamp of the runner
+          example: 2023-10-01T12:00:00Z
+          type: string
+        version:
+          deprecated: true
+          description: The version of the runner (deprecated in favor of apiVersion)
+          example: '0'
+          type: string
+        apiVersion:
+          deprecated: true
+          description: The api version of the runner
+          example: '0'
+          type: string
+        appVersion:
+          deprecated: true
+          description: The app version of the runner
+          example: v0.0.0-dev
+          type: string
+      required:
+        - apiVersion
+        - class
+        - cpu
+        - createdAt
+        - disk
+        - id
+        - memory
+        - name
         - region
         - state
         - unschedulable
@@ -9574,9 +10941,103 @@ components:
           example: runner.example.com
           type: string
       required:
-        - runnerDomain
         - runnerId
         - runnerSnapshotId
+      type: object
+    RunnerHealthMetrics:
+      properties:
+        currentCpuLoadAverage:
+          description: Current CPU load average
+          example: 0.98
+          type: number
+        currentCpuUsagePercentage:
+          description: Current CPU usage percentage
+          example: 45.5
+          type: number
+        currentMemoryUsagePercentage:
+          description: Current memory usage percentage
+          example: 60.2
+          type: number
+        currentDiskUsagePercentage:
+          description: Current disk usage percentage
+          example: 35.8
+          type: number
+        currentAllocatedCpu:
+          description: Currently allocated CPU cores
+          example: 8
+          type: number
+        currentAllocatedMemoryGiB:
+          description: Currently allocated memory in GiB
+          example: 16
+          type: number
+        currentAllocatedDiskGiB:
+          description: Currently allocated disk in GiB
+          example: 100
+          type: number
+        currentSnapshotCount:
+          description: Number of snapshots currently stored
+          example: 5
+          type: number
+        currentStartedSandboxes:
+          description: Number of started sandboxes
+          example: 10
+          type: number
+        cpu:
+          description: Total CPU cores on the runner
+          example: 8
+          type: number
+        memoryGiB:
+          description: Total RAM in GiB on the runner
+          example: 16
+          type: number
+        diskGiB:
+          description: Total disk space in GiB on the runner
+          example: 100
+          type: number
+      required:
+        - cpu
+        - currentAllocatedCpu
+        - currentAllocatedDiskGiB
+        - currentAllocatedMemoryGiB
+        - currentCpuLoadAverage
+        - currentCpuUsagePercentage
+        - currentDiskUsagePercentage
+        - currentMemoryUsagePercentage
+        - currentSnapshotCount
+        - currentStartedSandboxes
+        - diskGiB
+        - memoryGiB
+      type: object
+    RunnerHealthcheck:
+      example:
+        appVersion: v0.0.0-dev
+        apiUrl: http://api.daytona.example.com:8080
+        proxyUrl: http://proxy.daytona.example.com:8080
+        domain: runner-123.daytona.example.com
+        metrics: ''
+      properties:
+        metrics:
+          allOf:
+            - $ref: '#/components/schemas/RunnerHealthMetrics'
+          description: Runner metrics
+        domain:
+          description: Runner domain
+          example: runner-123.daytona.example.com
+          type: string
+        proxyUrl:
+          description: Runner proxy URL
+          example: http://proxy.daytona.example.com:8080
+          type: string
+        apiUrl:
+          description: Runner API URL
+          example: http://api.daytona.example.com:8080
+          type: string
+        appVersion:
+          description: Runner app version
+          example: v0.0.0-dev
+          type: string
+      required:
+        - appVersion
       type: object
     ProjectDirResponse:
       example:
@@ -11019,6 +12480,7 @@ components:
         imageName: ubuntu:22.04
         memory: 1
         buildInfo: ''
+        regionId: regionId
         entrypoint: sleep infinity
         name: ubuntu-4vcpu-8ram-100gb
         cpu: 1
@@ -11061,6 +12523,10 @@ components:
           allOf:
             - $ref: '#/components/schemas/CreateBuildInfo'
           description: Build information for the snapshot
+        regionId:
+          description: ID of the region where the snapshot will be available. Defaults
+            to organization default region if not specified.
+          type: string
       required:
         - name
       type: object
@@ -11080,11 +12546,15 @@ components:
         imageName: imageName
         buildInfo: ''
         cpu: 6.027456183070403
+        regionIds:
+          - regionIds
+          - regionIds
         gpu: 1.4658129805029452
         organizationId: organizationId
         general: true
         createdAt: 2000-01-23T04:56:07.000+00:00
         disk: 5.637376656633329
+        ref: daytonaio/sandbox:latest
         size: 0.8008281904610115
         mem: 5.962133916683182
         lastUsedAt: 2000-01-23T04:56:07.000+00:00
@@ -11095,6 +12565,7 @@ components:
         name: name
         id: id
         state: ''
+        initialRunnerId: runner123
         updatedAt: 2000-01-23T04:56:07.000+00:00
       properties:
         id:
@@ -11143,6 +12614,19 @@ components:
           allOf:
             - $ref: '#/components/schemas/BuildInfo'
           description: Build information for the snapshot
+        regionIds:
+          description: IDs of regions where the snapshot is available
+          items:
+            type: string
+          type: array
+        initialRunnerId:
+          description: The initial runner ID of the snapshot
+          example: runner123
+          type: string
+        ref:
+          description: The snapshot reference
+          example: daytonaio/sandbox:latest
+          type: string
       required:
         - cpu
         - createdAt
@@ -11168,11 +12652,15 @@ components:
           - imageName: imageName
             buildInfo: ''
             cpu: 6.027456183070403
+            regionIds:
+              - regionIds
+              - regionIds
             gpu: 1.4658129805029452
             organizationId: organizationId
             general: true
             createdAt: 2000-01-23T04:56:07.000+00:00
             disk: 5.637376656633329
+            ref: daytonaio/sandbox:latest
             size: 0.8008281904610115
             mem: 5.962133916683182
             lastUsedAt: 2000-01-23T04:56:07.000+00:00
@@ -11183,15 +12671,20 @@ components:
             name: name
             id: id
             state: ''
+            initialRunnerId: runner123
             updatedAt: 2000-01-23T04:56:07.000+00:00
           - imageName: imageName
             buildInfo: ''
             cpu: 6.027456183070403
+            regionIds:
+              - regionIds
+              - regionIds
             gpu: 1.4658129805029452
             organizationId: organizationId
             general: true
             createdAt: 2000-01-23T04:56:07.000+00:00
             disk: 5.637376656633329
+            ref: daytonaio/sandbox:latest
             size: 0.8008281904610115
             mem: 5.962133916683182
             lastUsedAt: 2000-01-23T04:56:07.000+00:00
@@ -11202,6 +12695,7 @@ components:
             name: name
             id: id
             state: ''
+            initialRunnerId: runner123
             updatedAt: 2000-01-23T04:56:07.000+00:00
       properties:
         items:
@@ -11263,6 +12757,7 @@ components:
         snapshotState: None
         public: false
         errorReason: The sandbox is not running
+        runnerId: runner123
         id: sandbox123
         state: creating
         class: small
@@ -11437,6 +12932,10 @@ components:
         daemonVersion:
           description: The version of the daemon running in the sandbox
           example: 1.0.0
+          type: string
+        runnerId:
+          description: The runner ID of the sandbox
+          example: runner123
           type: string
         image:
           description: The image used for the workspace
@@ -11670,6 +13169,199 @@ components:
       required:
         - name
       type: object
+    JobStatus:
+      enum:
+        - PENDING
+        - IN_PROGRESS
+        - COMPLETED
+        - FAILED
+      type: string
+    JobType:
+      description: The type of the job
+      enum:
+        - CREATE_SANDBOX
+        - START_SANDBOX
+        - STOP_SANDBOX
+        - DESTROY_SANDBOX
+        - CREATE_BACKUP
+        - BUILD_SNAPSHOT
+        - PULL_SNAPSHOT
+        - RECOVER_SANDBOX
+        - INSPECT_SNAPSHOT_IN_REGISTRY
+        - REMOVE_SNAPSHOT
+        - UPDATE_SANDBOX_NETWORK_SETTINGS
+      type: string
+    Job:
+      example:
+        createdAt: 2024-10-01T12:00:00Z
+        resourceId: sandbox123
+        payload: payload
+        errorMessage: Failed to create sandbox
+        id: job123
+        type: CREATE_SANDBOX
+        traceContext:
+          traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+        status: PENDING
+        resourceType: SANDBOX
+        updatedAt: 2024-10-01T12:00:00Z
+      properties:
+        id:
+          description: The ID of the job
+          example: job123
+          type: string
+        type:
+          allOf:
+            - $ref: '#/components/schemas/JobType'
+          description: The type of the job
+          example: CREATE_SANDBOX
+        status:
+          allOf:
+            - $ref: '#/components/schemas/JobStatus'
+          description: The status of the job
+          example: PENDING
+        resourceType:
+          description: The type of resource this job operates on
+          enum:
+            - SANDBOX
+            - SNAPSHOT
+            - BACKUP
+          example: SANDBOX
+          type: string
+        resourceId:
+          description: "The ID of the resource this job operates on (sandboxId, snapshotRef,\
+            \ etc.)"
+          example: sandbox123
+          type: string
+        payload:
+          description: Job-specific JSON-encoded payload data (operational metadata)
+          type: string
+        traceContext:
+          additionalProperties: true
+          description: OpenTelemetry trace context for distributed tracing (W3C Trace
+            Context format)
+          example:
+            traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+          type: object
+        errorMessage:
+          description: Error message if the job failed
+          example: Failed to create sandbox
+          type: string
+        createdAt:
+          description: The creation timestamp of the job
+          example: 2024-10-01T12:00:00Z
+          type: string
+        updatedAt:
+          description: The last update timestamp of the job
+          example: 2024-10-01T12:00:00Z
+          type: string
+      required:
+        - createdAt
+        - id
+        - resourceId
+        - resourceType
+        - status
+        - type
+      type: object
+    PaginatedJobs:
+      example:
+        total: 0.8008281904610115
+        totalPages: 1.4658129805029452
+        page: 6.027456183070403
+        items:
+          - createdAt: 2024-10-01T12:00:00Z
+            resourceId: sandbox123
+            payload: payload
+            errorMessage: Failed to create sandbox
+            id: job123
+            type: CREATE_SANDBOX
+            traceContext:
+              traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+            status: PENDING
+            resourceType: SANDBOX
+            updatedAt: 2024-10-01T12:00:00Z
+          - createdAt: 2024-10-01T12:00:00Z
+            resourceId: sandbox123
+            payload: payload
+            errorMessage: Failed to create sandbox
+            id: job123
+            type: CREATE_SANDBOX
+            traceContext:
+              traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+            status: PENDING
+            resourceType: SANDBOX
+            updatedAt: 2024-10-01T12:00:00Z
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/Job'
+          type: array
+        total:
+          type: number
+        page:
+          type: number
+        totalPages:
+          type: number
+      required:
+        - items
+        - page
+        - total
+        - totalPages
+      type: object
+    PollJobsResponse:
+      example:
+        jobs:
+          - createdAt: 2024-10-01T12:00:00Z
+            resourceId: sandbox123
+            payload: payload
+            errorMessage: Failed to create sandbox
+            id: job123
+            type: CREATE_SANDBOX
+            traceContext:
+              traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+            status: PENDING
+            resourceType: SANDBOX
+            updatedAt: 2024-10-01T12:00:00Z
+          - createdAt: 2024-10-01T12:00:00Z
+            resourceId: sandbox123
+            payload: payload
+            errorMessage: Failed to create sandbox
+            id: job123
+            type: CREATE_SANDBOX
+            traceContext:
+              traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+            status: PENDING
+            resourceType: SANDBOX
+            updatedAt: 2024-10-01T12:00:00Z
+      properties:
+        jobs:
+          description: List of jobs
+          items:
+            $ref: '#/components/schemas/Job'
+          type: array
+      required:
+        - jobs
+      type: object
+    UpdateJobStatus:
+      example:
+        resultMetadata: resultMetadata
+        errorMessage: Failed to create sandbox
+        status: IN_PROGRESS
+      properties:
+        status:
+          allOf:
+            - $ref: '#/components/schemas/JobStatus'
+          description: The new status of the job
+          example: IN_PROGRESS
+        errorMessage:
+          description: Error message if the job failed
+          example: Failed to create sandbox
+          type: string
+        resultMetadata:
+          description: Result metadata for the job
+          type: string
+      required:
+        - status
+      type: object
     CreateDockerRegistry:
       example:
         registryType: organization
@@ -11842,6 +13534,60 @@ components:
         - name
         - url
         - username
+      type: object
+    AdminCreateRunner:
+      example:
+        diskGiB: 100
+        apiVersion: '2'
+        apiKey: apiKey
+        apiUrl: https://api.runner1.example.com
+        regionId: regionId
+        proxyUrl: https://proxy.runner1.example.com
+        memoryGiB: 16
+        domain: runner1.example.com
+        name: name
+        cpu: 8
+      properties:
+        regionId:
+          type: string
+        name:
+          type: string
+        apiKey:
+          type: string
+        apiVersion:
+          description: The api version of the runner to create
+          example: '2'
+          pattern: ^(0|2)$
+          type: string
+        domain:
+          description: The domain of the runner
+          example: runner1.example.com
+          type: string
+        apiUrl:
+          description: The API URL of the runner
+          example: https://api.runner1.example.com
+          type: string
+        proxyUrl:
+          description: The proxy URL of the runner
+          example: https://proxy.runner1.example.com
+          type: string
+        cpu:
+          description: The CPU capacity of the runner
+          example: 8
+          type: number
+        memoryGiB:
+          description: The memory capacity of the runner in GiB
+          example: 16
+          type: number
+        diskGiB:
+          description: The disk capacity of the runner in GiB
+          example: 100
+          type: number
+      required:
+        - apiKey
+        - apiVersion
+        - name
+        - regionId
       type: object
     WebhookAppPortalAccess:
       example:

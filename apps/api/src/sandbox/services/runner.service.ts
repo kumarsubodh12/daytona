@@ -3,33 +3,51 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { Injectable, Logger, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Cron, CronExpression } from '@nestjs/schedule'
-import { FindOptionsWhere, In, MoreThanOrEqual, Not, Repository } from 'typeorm'
+import { DataSource, FindOptionsWhere, In, MoreThanOrEqual, Not, Repository } from 'typeorm'
 import { Runner } from '../entities/runner.entity'
-import { CreateRunnerDto } from '../dto/create-runner.dto'
+import { CreateRunnerInternalDto } from '../dto/create-runner-internal.dto'
 import { SandboxClass } from '../enums/sandbox-class.enum'
 import { RunnerState } from '../enums/runner-state.enum'
 import { BadRequestError } from '../../exceptions/bad-request.exception'
-import { SandboxEvents } from '../constants/sandbox-events.constants'
-import { OnEvent } from '@nestjs/event-emitter'
-import { SandboxStateUpdatedEvent } from '../events/sandbox-state-updated.event'
+import { EventEmitter2 } from '@nestjs/event-emitter'
 import { SandboxState } from '../enums/sandbox-state.enum'
 import { Sandbox } from '../entities/sandbox.entity'
 import { SnapshotRunner } from '../entities/snapshot-runner.entity'
 import { SnapshotRunnerState } from '../enums/snapshot-runner-state.enum'
-import { Snapshot } from '../entities/snapshot.entity'
 import { RunnerSnapshotDto } from '../dto/runner-snapshot.dto'
 import { RunnerAdapterFactory, RunnerInfo } from '../runner-adapter/runnerAdapter'
 import { RedisLockProvider } from '../common/redis-lock.provider'
 import { TypedConfigService } from '../../config/typed-config.service'
 import { LogExecution } from '../../common/decorators/log-execution.decorator'
 import { WithInstrumentation } from '../../common/decorators/otel.decorator'
+import { RegionService } from '../../region/services/region.service'
+import { RUNNER_NAME_REGEX } from '../constants/runner-name-regex.constant'
+import { RegionType } from '../../region/enums/region-type.enum'
+import { RunnerDto } from '../dto/runner.dto'
+import { RunnerEvents } from '../constants/runner-events'
+import { RunnerStateUpdatedEvent } from '../events/runner-state-updated.event'
+import { RunnerDeletedEvent } from '../events/runner-deleted.event'
+import { generateApiKeyValue } from '../../common/utils/api-key'
+import { RunnerFullDto } from '../dto/runner-full.dto'
+import { Snapshot } from '../entities/snapshot.entity'
 
 @Injectable()
 export class RunnerService {
   private readonly logger = new Logger(RunnerService.name)
+  private readonly serviceStartTime = new Date()
+  private readonly scoreConfig: AvailabilityScoreConfig
 
   constructor(
     @InjectRepository(Runner)
@@ -39,40 +57,131 @@ export class RunnerService {
     private readonly sandboxRepository: Repository<Sandbox>,
     @InjectRepository(SnapshotRunner)
     private readonly snapshotRunnerRepository: Repository<SnapshotRunner>,
-    @InjectRepository(Snapshot)
-    private readonly snapshotRepository: Repository<Snapshot>,
     private readonly redisLockProvider: RedisLockProvider,
     private readonly configService: TypedConfigService,
-  ) {}
-
-  async create(createRunnerDto: CreateRunnerDto): Promise<Runner> {
-    // Validate region and class
-    if (createRunnerDto.region.trim().length === 0) {
-      throw new Error('Invalid region')
-    }
-    if (!this.isValidClass(createRunnerDto.class)) {
-      throw new Error('Invalid class')
-    }
-
-    const runner = new Runner()
-    runner.domain = createRunnerDto.domain
-    runner.apiUrl = createRunnerDto.apiUrl
-    runner.proxyUrl = createRunnerDto.proxyUrl
-    runner.apiKey = createRunnerDto.apiKey
-    runner.cpu = createRunnerDto.cpu
-    runner.memoryGiB = createRunnerDto.memoryGiB
-    runner.diskGiB = createRunnerDto.diskGiB
-    runner.gpu = createRunnerDto.gpu
-    runner.gpuType = createRunnerDto.gpuType
-    runner.region = createRunnerDto.region
-    runner.class = createRunnerDto.class
-    runner.version = createRunnerDto.version
-
-    return this.runnerRepository.save(runner)
+    private readonly regionService: RegionService,
+    @InjectRepository(Snapshot)
+    private readonly snapshotRepository: Repository<Snapshot>,
+    @Inject(EventEmitter2)
+    private eventEmitter: EventEmitter2,
+    private readonly dataSource: DataSource,
+  ) {
+    this.scoreConfig = this.getAvailabilityScoreConfig()
   }
 
-  async findAll(): Promise<Runner[]> {
-    return this.runnerRepository.find()
+  /**
+   * @throws {BadRequestException} If the runner name or class is invalid.
+   * @throws {NotFoundException} If the region is not found.
+   * @throws {ConflictException} If a runner with the same values already exists.
+   */
+  async create(createRunnerDto: CreateRunnerInternalDto): Promise<{
+    runner: Runner
+    apiKey: string
+  }> {
+    if (!RUNNER_NAME_REGEX.test(createRunnerDto.name)) {
+      throw new BadRequestException('Runner name must contain only letters, numbers, underscores, periods, and hyphens')
+    }
+    if (createRunnerDto.name.length < 2 || createRunnerDto.name.length > 255) {
+      throw new BadRequestException('Runner name must be between 3 and 255 characters')
+    }
+
+    const apiKey = createRunnerDto.apiKey ?? generateApiKeyValue()
+
+    let runner: Runner
+
+    switch (createRunnerDto.apiVersion) {
+      case '0':
+        runner = new Runner({
+          region: createRunnerDto.regionId,
+          name: createRunnerDto.name,
+          apiVersion: createRunnerDto.apiVersion,
+          apiKey: apiKey,
+          cpu: createRunnerDto.cpu,
+          memoryGiB: createRunnerDto.memoryGiB,
+          diskGiB: createRunnerDto.diskGiB,
+          domain: createRunnerDto.domain,
+          apiUrl: createRunnerDto.apiUrl,
+          proxyUrl: createRunnerDto.proxyUrl,
+          appVersion: createRunnerDto.appVersion,
+        })
+        break
+      case '2':
+        runner = new Runner({
+          region: createRunnerDto.regionId,
+          name: createRunnerDto.name,
+          apiVersion: createRunnerDto.apiVersion,
+          apiKey: apiKey,
+          appVersion: createRunnerDto.appVersion,
+        })
+        break
+      default:
+        throw new BadRequestException('Invalid runner version')
+    }
+
+    try {
+      const savedRunner = await this.runnerRepository.save(runner)
+      return { runner: savedRunner, apiKey }
+    } catch (error) {
+      if (error.code === '23505') {
+        if (error.detail.includes('domain')) {
+          throw new ConflictException('This domain is already in use')
+        }
+        if (error.detail.includes('name')) {
+          throw new ConflictException(`Runner with name ${createRunnerDto.name} already exists in this region`)
+        }
+        throw new ConflictException('A runner with these values already exists')
+      }
+      throw error
+    }
+  }
+
+  async findAllFull(): Promise<RunnerFullDto[]> {
+    const runners = await this.runnerRepository.find()
+
+    const regionIds = new Set(runners.map((runner) => runner.region))
+    const regions = await this.regionService.findByIds(Array.from(regionIds))
+
+    const regionTypeMap = new Map<string, RegionType>()
+    regions.forEach((region) => {
+      regionTypeMap.set(region.id, region.regionType)
+    })
+
+    return runners.map((runner) => RunnerFullDto.fromRunner(runner, regionTypeMap.get(runner.region)))
+  }
+
+  async findAllByRegion(regionId: string): Promise<RunnerDto[]> {
+    const runners = await this.runnerRepository.find({
+      where: {
+        region: regionId,
+      },
+    })
+
+    return runners.map(RunnerDto.fromRunner)
+  }
+
+  async findAllByRegionFull(regionId: string): Promise<RunnerFullDto[]> {
+    const runners = await this.runnerRepository.find({
+      where: {
+        region: regionId,
+      },
+    })
+
+    const region = await this.regionService.findOne(regionId)
+
+    return runners.map((runner) => RunnerFullDto.fromRunner(runner, region?.regionType))
+  }
+
+  async findAllByOrganization(organizationId: string, regionType?: RegionType): Promise<RunnerDto[]> {
+    const regions = await this.regionService.findAllByOrganization(organizationId, regionType)
+    const regionIds = regions.map((region) => region.id)
+
+    const runners = await this.runnerRepository.find({
+      where: {
+        region: In(regionIds),
+      },
+    })
+
+    return runners.map(RunnerDto.fromRunner)
   }
 
   async findAllReady(): Promise<Runner[]> {
@@ -85,6 +194,17 @@ export class RunnerService {
 
   async findOne(id: string): Promise<Runner | null> {
     return this.runnerRepository.findOneBy({ id })
+  }
+
+  async findOneFullOrFail(id: string): Promise<RunnerFullDto> {
+    const runner = await this.findOne(id)
+    if (!runner) {
+      throw new NotFoundException('Runner not found')
+    }
+
+    const region = await this.regionService.findOne(runner.region)
+
+    return RunnerFullDto.fromRunner(runner, region?.regionType)
   }
 
   async findOneByDomain(domain: string): Promise<Runner | null> {
@@ -117,13 +237,29 @@ export class RunnerService {
     return this.runnerRepository.findOneBy({ id: sandbox.runnerId })
   }
 
+  async getRegionId(runnerId: string): Promise<string> {
+    const runner = await this.runnerRepository.findOne({
+      where: {
+        id: runnerId,
+      },
+      select: ['region'],
+      loadEagerRelations: false,
+    })
+
+    if (!runner || !runner.region) {
+      throw new NotFoundException('Runner not found')
+    }
+
+    return runner.region
+  }
+
   async findAvailableRunners(params: GetRunnerParams): Promise<Runner[]> {
     const runnerFilter: FindOptionsWhere<Runner> = {
       state: RunnerState.READY,
       unschedulable: Not(true),
       availabilityScore: params.availabilityScoreThreshold
         ? MoreThanOrEqual(params.availabilityScoreThreshold)
-        : MoreThanOrEqual(this.configService.getOrThrow('runnerUsage.availabilityScoreThreshold')),
+        : MoreThanOrEqual(this.configService.getOrThrow('runnerScore.thresholds.availability')),
     }
 
     const excludedRunnerIds = params.excludedRunnerIds?.length
@@ -168,15 +304,129 @@ export class RunnerService {
     return runners.sort((a, b) => b.availabilityScore - a.availabilityScore).slice(0, 10)
   }
 
+  /**
+   * @throws {NotFoundException} If the runner is not found.
+   * @throws {HttpException} If the runner is not unschedulable.
+   * @throws {HttpException} If the runner has sandboxes associated with it.
+   */
   async remove(id: string): Promise<void> {
-    await this.runnerRepository.delete(id)
+    const runner = await this.findOne(id)
+    if (!runner) {
+      throw new NotFoundException('Runner not found')
+    }
+
+    if (!runner.unschedulable) {
+      throw new HttpException(
+        'Cannot delete runner which is available for scheduling sandboxes',
+        HttpStatus.PRECONDITION_REQUIRED,
+      )
+    }
+
+    const sandboxCount = await this.sandboxRepository.count({
+      where: { runnerId: id, state: Not(In([SandboxState.ARCHIVED, SandboxState.DESTROYED])) },
+    })
+    if (sandboxCount > 0) {
+      throw new HttpException(
+        'Cannot delete runner which has sandboxes associated with it',
+        HttpStatus.PRECONDITION_REQUIRED,
+      )
+    }
+
+    await this.dataSource.transaction(async (em) => {
+      await em.delete(Runner, id)
+      await this.eventEmitter.emitAsync(RunnerEvents.DELETED, new RunnerDeletedEvent(em, id))
+    })
   }
 
-  @OnEvent(SandboxEvents.STATE_UPDATED)
-  async handleSandboxStateUpdate(event: SandboxStateUpdatedEvent) {
-    if (![SandboxState.DESTROYED, SandboxState.CREATING, SandboxState.ARCHIVED].includes(event.newState)) {
+  async updateRunnerHealth(
+    runnerId: string,
+    domain?: string,
+    apiUrl?: string,
+    proxyUrl?: string,
+    metrics?: {
+      currentCpuLoadAverage?: number
+      currentCpuUsagePercentage?: number
+      currentMemoryUsagePercentage?: number
+      currentDiskUsagePercentage?: number
+      currentAllocatedCpu?: number
+      currentAllocatedMemoryGiB?: number
+      currentAllocatedDiskGiB?: number
+      currentSnapshotCount?: number
+      currentStartedSandboxes?: number
+      cpu?: number
+      memoryGiB?: number
+      diskGiB?: number
+    },
+    appVersion?: string,
+  ): Promise<void> {
+    const runner = await this.runnerRepository.findOne({ where: { id: runnerId } })
+    if (!runner) {
+      this.logger.error(`Runner ${runnerId} not found when trying to update health`)
       return
     }
+
+    if (runner.state === RunnerState.DECOMMISSIONED) {
+      this.logger.debug(`Runner ${runnerId} is decommissioned, not updating health`)
+      return
+    }
+
+    const updateData: Partial<Runner> = {
+      state: RunnerState.READY,
+      lastChecked: new Date(),
+    }
+
+    if (domain) {
+      updateData.domain = domain
+    }
+
+    if (apiUrl) {
+      updateData.apiUrl = apiUrl
+    }
+
+    if (proxyUrl) {
+      updateData.proxyUrl = proxyUrl
+    }
+
+    if (appVersion) {
+      updateData.appVersion = appVersion
+    }
+
+    if (metrics) {
+      updateData.currentCpuLoadAverage = metrics.currentCpuLoadAverage || 0
+      updateData.currentCpuUsagePercentage = metrics.currentCpuUsagePercentage || 0
+      updateData.currentMemoryUsagePercentage = metrics.currentMemoryUsagePercentage || 0
+      updateData.currentDiskUsagePercentage = metrics.currentDiskUsagePercentage || 0
+      updateData.currentAllocatedCpu = metrics.currentAllocatedCpu || 0
+      updateData.currentAllocatedMemoryGiB = metrics.currentAllocatedMemoryGiB || 0
+      updateData.currentAllocatedDiskGiB = metrics.currentAllocatedDiskGiB || 0
+      updateData.currentSnapshotCount = metrics.currentSnapshotCount || 0
+      updateData.currentStartedSandboxes = metrics.currentStartedSandboxes || 0
+      updateData.cpu = metrics.cpu
+      updateData.memoryGiB = metrics.memoryGiB
+      updateData.diskGiB = metrics.diskGiB
+
+      updateData.availabilityScore = this.calculateAvailabilityScore(runnerId, {
+        cpuLoadAverage: updateData.currentCpuLoadAverage,
+        cpuUsage: updateData.currentCpuUsagePercentage,
+        memoryUsage: updateData.currentMemoryUsagePercentage,
+        diskUsage: updateData.currentDiskUsagePercentage,
+        allocatedCpu: updateData.currentAllocatedCpu,
+        allocatedMemoryGiB: updateData.currentAllocatedMemoryGiB,
+        allocatedDiskGiB: updateData.currentAllocatedDiskGiB,
+        runnerCpu: updateData.cpu || runner.cpu,
+        runnerMemoryGiB: updateData.memoryGiB || runner.memoryGiB,
+        runnerDiskGiB: updateData.diskGiB || runner.diskGiB,
+        startedSandboxes: updateData.currentStartedSandboxes || 0,
+      })
+    }
+
+    await this.runnerRepository.update(runnerId, updateData)
+    this.logger.debug(`Updated health for runner ${runnerId}`)
+
+    this.eventEmitter.emit(
+      RunnerEvents.STATE_UPDATED,
+      new RunnerStateUpdatedEvent(runner, runner.state, updateData.state),
+    )
   }
 
   private async updateRunnerState(runnerId: string, newState: RunnerState): Promise<void> {
@@ -196,6 +446,8 @@ export class RunnerService {
       state: newState,
       lastChecked: new Date(),
     })
+
+    this.eventEmitter.emit(RunnerEvents.STATE_UPDATED, new RunnerStateUpdatedEvent(runner, runner.state, newState))
   }
 
   @Cron(CronExpression.EVERY_10_SECONDS, { name: 'check-runners', waitForCompletion: true })
@@ -210,9 +462,17 @@ export class RunnerService {
 
     try {
       const runners = await this.runnerRepository.find({
-        where: {
-          state: Not(RunnerState.DECOMMISSIONED),
-        },
+        where: [
+          {
+            apiVersion: '0',
+            state: Not(RunnerState.DECOMMISSIONED),
+          },
+          {
+            // v2 runners report health via healthcheck endpoint, so we only check if the health is stale (lastChecked timestamp)
+            apiVersion: '2',
+            state: RunnerState.READY,
+          },
+        ],
         order: {
           lastChecked: {
             direction: 'ASC',
@@ -224,6 +484,13 @@ export class RunnerService {
 
       await Promise.allSettled(
         runners.map(async (runner) => {
+          // v2 runners report health via healthcheck endpoint, check based on lastChecked timestamp
+          if (runner.apiVersion === '2') {
+            await this.checkRunnerV2Health(runner)
+            return
+          }
+
+          // v0 runners: imperative health check via adapter
           const shouldRetry = runner.state === RunnerState.READY
           const retryDelays = shouldRetry ? [500, 1000] : []
 
@@ -252,7 +519,14 @@ export class RunnerService {
                     this.logger.warn(`Failed to get runner info for runner ${runner.id}: ${e.message}`)
                   }
 
-                  await this.updateRunnerStatus(runner.id, runnerInfo)
+                  await this.updateRunnerHealth(
+                    runner.id,
+                    undefined,
+                    undefined,
+                    undefined,
+                    runnerInfo?.metrics,
+                    runnerInfo?.appVersion,
+                  )
                 })(),
                 new Promise((_, reject) => {
                   timeoutId = setTimeout(() => {
@@ -296,60 +570,49 @@ export class RunnerService {
     }
   }
 
-  private async updateRunnerStatus(runnerId: string, runnerInfo?: RunnerInfo) {
-    const runner = await this.runnerRepository.findOne({ where: { id: runnerId } })
-    if (!runner) {
-      this.logger.error(`Runner ${runnerId} not found when trying to update status`)
+  /**
+   * Check v2 runner health based on lastChecked timestamp.
+   * v2 runners report health via the healthcheck endpoint, so we check if lastChecked is within threshold.
+   */
+  private async checkRunnerV2Health(runner: Runner): Promise<void> {
+    const markAsUnresponsive = async () => {
+      this.logger.warn(
+        `v2 Runner ${runner.id} health check stale (last: ${Math.round((Date.now() - runner.lastChecked.getTime()) / 1000)}s ago), marking as UNRESPONSIVE`,
+      )
+      await this.updateRunnerState(runner.id, RunnerState.UNRESPONSIVE)
+    }
+
+    if (!runner.lastChecked) {
       return
     }
 
-    if (runner.state === RunnerState.DECOMMISSIONED) {
-      this.logger.debug(`Runner ${runnerId} is decommissioned, not updating status`)
-      return
-    }
+    // v2 runners report health every ~10 seconds via the healthcheck endpoint
+    // Allow 60 seconds (6 missed healthchecks) before marking as UNRESPONSIVE
+    const healthCheckThresholdMs = 60 * 1000
 
-    const updateData: Partial<Runner> = {
-      state: RunnerState.READY,
-      lastChecked: new Date(),
-    }
+    if (runner.lastChecked < this.serviceStartTime) {
+      // Allow the runner a grace period to re-establish health checks
+      const timeSinceServiceStart = Date.now() - this.serviceStartTime.getTime()
 
-    const metrics = runnerInfo?.metrics
-
-    if (metrics && typeof metrics.currentCpuUsagePercentage !== 'undefined') {
-      updateData.currentCpuUsagePercentage = metrics.currentCpuUsagePercentage || 0
-      updateData.currentMemoryUsagePercentage = metrics.currentMemoryUsagePercentage || 0
-      updateData.currentDiskUsagePercentage = metrics.currentDiskUsagePercentage || 0
-      updateData.currentAllocatedCpu = metrics.currentAllocatedCpu || 0
-      updateData.currentAllocatedMemoryGiB = metrics.currentAllocatedMemoryGiB || 0
-      updateData.currentAllocatedDiskGiB = metrics.currentAllocatedDiskGiB || 0
-      updateData.currentSnapshotCount = metrics.currentSnapshotCount || 0
-
-      updateData.availabilityScore = this.calculateAvailabilityScore(runnerId, {
-        cpuUsage: updateData.currentCpuUsagePercentage,
-        memoryUsage: updateData.currentMemoryUsagePercentage,
-        diskUsage: updateData.currentDiskUsagePercentage,
-        allocatedCpu: updateData.currentAllocatedCpu,
-        allocatedMemoryGiB: updateData.currentAllocatedMemoryGiB,
-        allocatedDiskGiB: updateData.currentAllocatedDiskGiB,
-        runnerCpu: runner.cpu,
-        runnerMemoryGiB: runner.memoryGiB,
-        runnerDiskGiB: runner.diskGiB,
-      })
+      if (timeSinceServiceStart > healthCheckThresholdMs) {
+        // Grace period expired and runner still hasn't checked in
+        await markAsUnresponsive()
+      }
     } else {
-      this.logger.warn(`Runner ${runnerId} didn't send health metrics`)
+      // Runner has checked in since API started - use normal threshold
+      const timeSinceLastCheck = Date.now() - runner.lastChecked.getTime()
+
+      if (timeSinceLastCheck > healthCheckThresholdMs) {
+        // Runner hasn't reported health recently
+        await markAsUnresponsive()
+      }
     }
-
-    await this.runnerRepository.update(runnerId, updateData)
-  }
-
-  private isValidClass(sandboxClass: SandboxClass): boolean {
-    return Object.values(SandboxClass).includes(sandboxClass)
   }
 
   async updateSchedulingStatus(id: string, unschedulable: boolean): Promise<Runner> {
     const runner = await this.runnerRepository.findOne({ where: { id } })
     if (!runner) {
-      throw new Error('Runner not found')
+      throw new NotFoundException('Runner not found')
     }
 
     runner.unschedulable = unschedulable
@@ -473,17 +736,37 @@ export class RunnerService {
     })
   }
 
+  async getInitialRunnerBySnapshotId(snapshotId: string): Promise<Runner> {
+    const snapshot = await this.snapshotRepository.findOne({ where: { id: snapshotId } })
+    if (!snapshot) {
+      throw new NotFoundException('Snapshot runner not found')
+    }
+    if (!snapshot.initialRunnerId) {
+      throw new BadRequestException('Initial runner not found')
+    }
+
+    const runner = await this.runnerRepository.findOne({ where: { id: snapshot.initialRunnerId } })
+
+    if (!runner) {
+      throw new NotFoundException('Runner not found')
+    }
+
+    return runner
+  }
+
   private calculateAvailabilityScore(runnerId: string, params: AvailabilityScoreParams): number {
     if (
+      params.cpuLoadAverage < 0 ||
       params.cpuUsage < 0 ||
       params.memoryUsage < 0 ||
       params.diskUsage < 0 ||
       params.allocatedCpu < 0 ||
       params.allocatedMemoryGiB < 0 ||
-      params.allocatedDiskGiB < 0
+      params.allocatedDiskGiB < 0 ||
+      params.startedSandboxes < 0
     ) {
       this.logger.warn(
-        `Runner ${runnerId} has negative values for CPU, memory, disk, allocated CPU, allocated memory, or allocated disk`,
+        `Runner ${runnerId} has negative values for load, CPU, memory, disk, allocated CPU, allocated memory, allocated disk, or started sandboxes`,
       )
       return 0
     }
@@ -492,108 +775,118 @@ export class RunnerService {
   }
 
   private calculateTOPSISScore(params: AvailabilityScoreParams): number {
-    // Define ideal (best) and anti-ideal (worst) values
-    const ideal = {
-      cpu: 0,
-      memory: 0,
-      disk: 0,
-      allocCpu: 100, // 100% means no overallocation
-      allocMem: 100,
-      allocDisk: 100,
-    }
-
-    const antiIdeal = {
-      cpu: 100,
-      memory: 100,
-      disk: 100,
-      allocCpu: 500, // 500% means severe overallocation
-      allocMem: 500,
-      allocDisk: 500,
-    }
-
-    // Weights based on your requirements
-    const weights = [
-      this.configService.getOrThrow('runnerUsage.cpuUsageWeight'),
-      this.configService.getOrThrow('runnerUsage.memoryUsageWeight'),
-      this.configService.getOrThrow('runnerUsage.diskUsageWeight'),
-      this.configService.getOrThrow('runnerUsage.allocatedCpuWeight'),
-      this.configService.getOrThrow('runnerUsage.allocatedMemoryWeight'),
-      this.configService.getOrThrow('runnerUsage.allocatedDiskWeight'),
-    ]
-
-    const cpuPenaltyExponent = this.configService.getOrThrow('runnerUsage.cpuPenaltyExponent')
-    const memoryPenaltyExponent = this.configService.getOrThrow('runnerUsage.memoryPenaltyExponent')
-    const diskPenaltyExponent = this.configService.getOrThrow('runnerUsage.diskPenaltyExponent')
-
-    const cpuPenaltyThreshold = this.configService.getOrThrow('runnerUsage.cpuPenaltyThreshold')
-    const memoryPenaltyThreshold = this.configService.getOrThrow('runnerUsage.memoryPenaltyThreshold')
-    const diskPenaltyThreshold = this.configService.getOrThrow('runnerUsage.diskPenaltyThreshold')
-
-    // Calculate allocation ratios
-    const allocatedCpuRatio = (params.allocatedCpu / params.runnerCpu) * 100
-    const allocatedMemoryRatio = (params.allocatedMemoryGiB / params.runnerMemoryGiB) * 100
-    const allocatedDiskRatio = (params.allocatedDiskGiB / params.runnerDiskGiB) * 100
-
-    // Current values array
     const current = [
       params.cpuUsage,
       params.memoryUsage,
       params.diskUsage,
-      allocatedCpuRatio,
-      allocatedMemoryRatio,
-      allocatedDiskRatio,
-    ]
-
-    // Ideal and anti-ideal arrays
-    const idealValues = [ideal.cpu, ideal.memory, ideal.disk, ideal.allocCpu, ideal.allocMem, ideal.allocDisk]
-
-    const antiIdealValues = [
-      antiIdeal.cpu,
-      antiIdeal.memory,
-      antiIdeal.disk,
-      antiIdeal.allocCpu,
-      antiIdeal.allocMem,
-      antiIdeal.allocDisk,
+      // Allocation ratios percentage
+      (params.allocatedCpu / params.runnerCpu) * 100,
+      (params.allocatedMemoryGiB / params.runnerMemoryGiB) * 100,
+      (params.allocatedDiskGiB / params.runnerDiskGiB) * 100,
+      params.startedSandboxes, // Raw count, will be normalized against its critical target value
     ]
 
     // Calculate weighted Euclidean distances
-    let distanceToIdeal = 0
-    let distanceToAntiIdeal = 0
+    let distanceToOptimal = 0
+    let distanceToCritical = 0
 
     for (let i = 0; i < current.length; i++) {
-      const normalizedCurrent = current[i] / 100 // Normalize to 0-1 scale for allocation ratios >100%
-      const normalizedIdeal = idealValues[i] / 100
-      const normalizedAntiIdeal = antiIdealValues[i] / 100
+      // Normalize to 0-1 scale
+      const normalizedCurrent = current[i] / 100
+      const normalizedOptimal = this.scoreConfig.targetValues.optimal[i] / 100
+      const normalizedCritical = this.scoreConfig.targetValues.critical[i] / 100
 
-      distanceToIdeal += weights[i] * Math.pow(normalizedCurrent - normalizedIdeal, 2)
-      distanceToAntiIdeal += weights[i] * Math.pow(normalizedCurrent - normalizedAntiIdeal, 2)
+      distanceToOptimal += this.scoreConfig.weights[i] * Math.pow(normalizedCurrent - normalizedOptimal, 2)
+      distanceToCritical += this.scoreConfig.weights[i] * Math.pow(normalizedCurrent - normalizedCritical, 2)
     }
 
-    distanceToIdeal = Math.sqrt(distanceToIdeal)
-    distanceToAntiIdeal = Math.sqrt(distanceToAntiIdeal)
+    distanceToOptimal = Math.sqrt(distanceToOptimal)
+    distanceToCritical = Math.sqrt(distanceToCritical)
 
     // TOPSIS relative closeness score (0 to 1)
-    let topsisScore = distanceToAntiIdeal / (distanceToIdeal + distanceToAntiIdeal)
+    let topsisScore = distanceToCritical / (distanceToOptimal + distanceToCritical)
 
     // Apply exponential penalties for critical thresholds
     let penaltyMultiplier = 1
 
-    if (params.cpuUsage >= cpuPenaltyThreshold) {
-      penaltyMultiplier *= Math.exp(-cpuPenaltyExponent * (params.cpuUsage - cpuPenaltyThreshold))
+    if (params.cpuUsage >= this.scoreConfig.penalty.thresholds.cpu) {
+      penaltyMultiplier *= Math.exp(
+        -this.scoreConfig.penalty.exponents.cpu * (params.cpuUsage - this.scoreConfig.penalty.thresholds.cpu),
+      )
     }
 
-    if (params.memoryUsage >= memoryPenaltyThreshold) {
-      penaltyMultiplier *= Math.exp(-memoryPenaltyExponent * (params.memoryUsage - memoryPenaltyThreshold))
+    if (params.cpuLoadAverage >= this.scoreConfig.penalty.thresholds.cpuLoadAvg) {
+      penaltyMultiplier *= Math.exp(
+        -this.scoreConfig.penalty.exponents.cpuLoadAvg *
+          (params.cpuLoadAverage - this.scoreConfig.penalty.thresholds.cpuLoadAvg),
+      )
     }
 
-    if (params.diskUsage >= diskPenaltyThreshold) {
-      penaltyMultiplier *= Math.exp(-diskPenaltyExponent * (params.diskUsage - diskPenaltyThreshold))
+    if (params.memoryUsage >= this.scoreConfig.penalty.thresholds.memory) {
+      penaltyMultiplier *= Math.exp(
+        -this.scoreConfig.penalty.exponents.memory * (params.memoryUsage - this.scoreConfig.penalty.thresholds.memory),
+      )
+    }
+
+    if (params.diskUsage >= this.scoreConfig.penalty.thresholds.disk) {
+      penaltyMultiplier *= Math.exp(
+        -this.scoreConfig.penalty.exponents.disk * (params.diskUsage - this.scoreConfig.penalty.thresholds.disk),
+      )
     }
 
     // Apply penalty
     topsisScore *= penaltyMultiplier
 
     return Math.round(topsisScore * 100)
+  }
+
+  private getAvailabilityScoreConfig(): AvailabilityScoreConfig {
+    return {
+      availabilityThreshold: this.configService.getOrThrow('runnerScore.thresholds.availability'),
+      weights: [
+        this.configService.getOrThrow('runnerScore.weights.cpuUsage'),
+        this.configService.getOrThrow('runnerScore.weights.memoryUsage'),
+        this.configService.getOrThrow('runnerScore.weights.diskUsage'),
+        this.configService.getOrThrow('runnerScore.weights.allocatedCpu'),
+        this.configService.getOrThrow('runnerScore.weights.allocatedMemory'),
+        this.configService.getOrThrow('runnerScore.weights.allocatedDisk'),
+        this.configService.getOrThrow('runnerScore.weights.startedSandboxes'),
+      ],
+      penalty: {
+        exponents: {
+          cpu: this.configService.getOrThrow('runnerScore.penalty.exponents.cpu'),
+          cpuLoadAvg: this.configService.getOrThrow('runnerScore.penalty.exponents.cpuLoadAvg'),
+          memory: this.configService.getOrThrow('runnerScore.penalty.exponents.memory'),
+          disk: this.configService.getOrThrow('runnerScore.penalty.exponents.disk'),
+        },
+        thresholds: {
+          cpu: this.configService.getOrThrow('runnerScore.penalty.thresholds.cpu'),
+          cpuLoadAvg: this.configService.getOrThrow('runnerScore.penalty.thresholds.cpuLoadAvg'),
+          memory: this.configService.getOrThrow('runnerScore.penalty.thresholds.memory'),
+          disk: this.configService.getOrThrow('runnerScore.penalty.thresholds.disk'),
+        },
+      },
+      targetValues: {
+        optimal: [
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.cpu'),
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.memory'),
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.disk'),
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.allocCpu'),
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.allocMem'),
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.allocDisk'),
+          this.configService.getOrThrow('runnerScore.targetValues.optimal.startedSandboxes'),
+        ],
+        critical: [
+          this.configService.getOrThrow('runnerScore.targetValues.critical.cpu'),
+          this.configService.getOrThrow('runnerScore.targetValues.critical.memory'),
+          this.configService.getOrThrow('runnerScore.targetValues.critical.disk'),
+          this.configService.getOrThrow('runnerScore.targetValues.critical.allocCpu'),
+          this.configService.getOrThrow('runnerScore.targetValues.critical.allocMem'),
+          this.configService.getOrThrow('runnerScore.targetValues.critical.allocDisk'),
+          this.configService.getOrThrow('runnerScore.targetValues.critical.startedSandboxes'),
+        ],
+      },
+    }
   }
 }
 
@@ -606,13 +899,38 @@ export class GetRunnerParams {
 }
 
 interface AvailabilityScoreParams {
+  cpuLoadAverage: number
   cpuUsage: number
   memoryUsage: number
   diskUsage: number
   allocatedCpu: number
   allocatedMemoryGiB: number
   allocatedDiskGiB: number
+  startedSandboxes: number
   runnerCpu: number
   runnerMemoryGiB: number
   runnerDiskGiB: number
+}
+
+interface AvailabilityScoreConfig {
+  availabilityThreshold: number
+  weights: number[]
+  penalty: {
+    exponents: {
+      cpu: number
+      cpuLoadAvg: number
+      memory: number
+      disk: number
+    }
+    thresholds: {
+      cpu: number
+      cpuLoadAvg: number
+      memory: number
+      disk: number
+    }
+  }
+  targetValues: {
+    optimal: number[]
+    critical: number[]
+  }
 }

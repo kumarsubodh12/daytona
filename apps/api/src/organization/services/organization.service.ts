@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { EntityManager, In, Not, Repository } from 'typeorm'
-import { CreateOrganizationDto } from '../dto/create-organization.dto'
+import { CreateOrganizationInternalDto } from '../dto/create-organization.internal.dto'
 import { UpdateOrganizationQuotaDto } from '../dto/update-organization-quota.dto'
 import { Organization } from '../entities/organization.entity'
 import { OrganizationUser } from '../entities/organization-user.entity'
@@ -45,10 +45,11 @@ import { LogExecution } from '../../common/decorators/log-execution.decorator'
 import { WithInstrumentation } from '../../common/decorators/otel.decorator'
 import { RegionQuota } from '../entities/region-quota.entity'
 import { UpdateOrganizationRegionQuotaDto } from '../dto/update-organization-region-quota.dto'
-import { CreateOrganizationInternalDto } from '../dto/create-organization.internal.dto'
 import { RegionService } from '../../region/services/region.service'
 import { Region } from '../../region/entities/region.entity'
 import { RegionQuotaDto } from '../dto/region-quota.dto'
+import { RegionType } from '../../region/enums/region-type.enum'
+import { RegionDto } from '../../region/dto/region.dto'
 
 @Injectable()
 export class OrganizationService implements OnModuleInit, TrackableJobExecutions, OnApplicationShutdown {
@@ -69,6 +70,8 @@ export class OrganizationService implements OnModuleInit, TrackableJobExecutions
     private readonly redisLockProvider: RedisLockProvider,
     @InjectRepository(RegionQuota)
     private readonly regionQuotaRepository: Repository<RegionQuota>,
+    @InjectRepository(Region)
+    private readonly regionRepository: Repository<Region>,
     private readonly regionService: RegionService,
   ) {
     this.defaultOrganizationQuota = this.configService.getOrThrow('defaultOrganizationQuota')
@@ -90,7 +93,7 @@ export class OrganizationService implements OnModuleInit, TrackableJobExecutions
   }
 
   async create(
-    createOrganizationDto: CreateOrganizationDto,
+    createOrganizationDto: CreateOrganizationInternalDto,
     createdBy: string,
     personal = false,
     creatorEmailVerified = false,
@@ -204,6 +207,46 @@ export class OrganizationService implements OnModuleInit, TrackableJobExecutions
       return null
     }
     return this.getRegionQuota(sandbox.organizationId, sandbox.region)
+  }
+
+  /**
+   * Lists all available regions for the organization.
+   *
+   * A region is available for the organization if either:
+   * - It is directly associated with the organization, or
+   * - It is not associated with any organization, but the organization has quotas allocated for the region or quotas are not enforced for the region
+   *
+   * @param organizationId - The organization ID.
+   * @returns The available regions
+   */
+  async listAvailableRegions(organizationId: string): Promise<RegionDto[]> {
+    const regions = await this.regionRepository
+      .createQueryBuilder('region')
+      .where('region."regionType" = :customRegionType AND region."organizationId" = :organizationId', {
+        customRegionType: RegionType.CUSTOM,
+        organizationId,
+      })
+      .orWhere('region."regionType" IN (:...otherRegionTypes) AND region."enforceQuotas" = false', {
+        otherRegionTypes: [RegionType.DEDICATED, RegionType.SHARED],
+      })
+      .orWhere(
+        'region."regionType" IN (:...otherRegionTypes) AND region."enforceQuotas" = true AND EXISTS (SELECT 1 FROM region_quota rq WHERE rq."regionId" = region."id" AND rq."organizationId" = :organizationId)',
+        {
+          otherRegionTypes: [RegionType.DEDICATED, RegionType.SHARED],
+          organizationId,
+        },
+      )
+      .orderBy(
+        `CASE region."regionType" 
+          WHEN '${RegionType.CUSTOM}' THEN 1 
+          WHEN '${RegionType.DEDICATED}' THEN 2 
+          WHEN '${RegionType.SHARED}' THEN 3 
+          ELSE 4 
+        END`,
+      )
+      .getMany()
+
+    return regions.map(RegionDto.fromRegion)
   }
 
   async suspend(
@@ -408,11 +451,11 @@ export class OrganizationService implements OnModuleInit, TrackableJobExecutions
   }
 
   /**
-   * @throws NotFoundException - If the region is not found, hidden, or not a shared region
+   * @throws NotFoundException - If the region is not found or not available to the organization
    */
   async validateOrganizationDefaultRegion(defaultRegionId: string): Promise<Region> {
     const region = await this.regionService.findOne(defaultRegionId)
-    if (!region || region.hidden || region.organizationId !== null) {
+    if (!region || region.regionType !== RegionType.SHARED) {
       throw new NotFoundException('Region not found')
     }
 

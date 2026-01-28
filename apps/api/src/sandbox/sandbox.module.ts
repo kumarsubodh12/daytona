@@ -37,6 +37,7 @@ import { Volume } from './entities/volume.entity'
 import { BuildInfo } from './entities/build-info.entity'
 import { BackupManager } from './managers/backup.manager'
 import { VolumeSubscriber } from './subscribers/volume.subscriber'
+import { RunnerSubscriber } from './subscribers/runner.subscriber'
 import { WorkspaceController } from './controllers/workspace.deprecated.controller'
 import { RunnerAdapterFactory } from './runner-adapter/runnerAdapter'
 import { SandboxStartAction } from './managers/sandbox-actions/sandbox-start.action'
@@ -48,6 +49,11 @@ import { SandboxRepository } from './repositories/sandbox.repository'
 import { ProxyCacheInvalidationService } from './services/proxy-cache-invalidation.service'
 import { RegionModule } from '../region/region.module'
 import { Region } from '../region/entities/region.entity'
+import { SnapshotRegion } from './entities/snapshot-region.entity'
+import { JobController } from './controllers/job.controller'
+import { JobService } from './services/job.service'
+import { JobStateHandlerService } from './services/job-state-handler.service'
+import { Job } from './entities/job.entity'
 
 @Module({
   imports: [
@@ -61,11 +67,13 @@ import { Region } from '../region/entities/region.entity'
       Snapshot,
       BuildInfo,
       SnapshotRunner,
+      SnapshotRegion,
       DockerRegistry,
       WarmPool,
       Volume,
       SshAccess,
       Region,
+      Job,
     ]),
   ],
   controllers: [
@@ -76,6 +84,7 @@ import { Region } from '../region/entities/region.entity'
     WorkspaceController,
     PreviewController,
     VolumeController,
+    JobController,
   ],
   providers: [
     SandboxService,
@@ -93,11 +102,14 @@ import { Region } from '../region/entities/region.entity'
     VolumeService,
     VolumeManager,
     VolumeSubscriber,
+    RunnerSubscriber,
     RunnerAdapterFactory,
     SandboxStartAction,
     SandboxStopAction,
     SandboxDestroyAction,
     SandboxArchiveAction,
+    JobService,
+    JobStateHandlerService,
     {
       provide: SandboxRepository,
       inject: [DataSource],

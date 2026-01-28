@@ -6,6 +6,8 @@ package docker
 import (
 	"context"
 	"strings"
+
+	"github.com/daytonaio/runner/pkg/api/dto"
 )
 
 type ImageInfo struct {
@@ -13,6 +15,11 @@ type ImageInfo struct {
 	Entrypoint []string
 	Cmd        []string
 	Hash       string // Image hash/digest
+}
+
+type ImageDigest struct {
+	Digest string
+	Size   int64
 }
 
 func (d *DockerClient) GetImageInfo(ctx context.Context, imageName string) (*ImageInfo, error) {
@@ -41,5 +48,17 @@ func (d *DockerClient) GetImageInfo(ctx context.Context, imageName string) (*Ima
 		Entrypoint: inspect.Config.Entrypoint,
 		Cmd:        inspect.Config.Cmd,
 		Hash:       hash,
+	}, nil
+}
+
+func (d *DockerClient) InspectImageInRegistry(ctx context.Context, imageName string, registry *dto.RegistryDTO) (*ImageDigest, error) {
+	digest, err := d.apiClient.DistributionInspect(ctx, imageName, getRegistryAuth(registry))
+	if err != nil {
+		return nil, err
+	}
+
+	return &ImageDigest{
+		Digest: digest.Descriptor.Digest.String(),
+		Size:   digest.Descriptor.Size,
 	}, nil
 }

@@ -1,8 +1,8 @@
 /* tslint:disable */
 
 /**
- * Daytona Daemon API
- * Daytona Daemon API
+ * Daytona Toolbox API
+ * Daytona Toolbox API
  *
  * The version of the OpenAPI document: v0.0.0-dev
  *
@@ -23,5 +23,5 @@ export interface UserHomeDirResponse {
    * @type {string}
    * @memberof UserHomeDirResponse
    */
-  dir?: string
+  dir: string
 }

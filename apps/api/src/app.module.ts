@@ -39,6 +39,8 @@ import { getPinoTransport, swapMessageAndObject } from './common/utils/pino.util
 import { Redis } from 'ioredis'
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis'
 import { RegionModule } from './region/region.module'
+import { BodyParserErrorModule } from './common/modules/body-parser-error.module'
+import { AdminModule } from './admin/admin.module'
 
 @Module({
   imports: [
@@ -94,12 +96,14 @@ import { RegionModule } from './region/region.module'
               lazyConnect: configService.get('skipConnections'),
             },
           },
+          entitySkipConstructor: true,
         }
       },
     }),
+    BodyParserErrorModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..'),
-      exclude: ['/api/*'],
+      exclude: ['/api/{*path}'],
       renderPath: '/runner-amd64',
       serveStaticOptions: {
         cacheControl: false,
@@ -107,7 +111,7 @@ import { RegionModule } from './region/region.module'
     }),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'dashboard'),
-      exclude: ['/api/*'],
+      exclude: ['/api/{*path}'],
       renderPath: '/',
       serveStaticOptions: {
         cacheControl: false,
@@ -182,6 +186,7 @@ import { RegionModule } from './region/region.module'
     AnalyticsModule,
     OrganizationModule,
     RegionModule,
+    AdminModule,
     EmailModule.forRootAsync({
       inject: [TypedConfigService],
       useFactory: (configService: TypedConfigService) => {
@@ -224,7 +229,7 @@ import { RegionModule } from './region/region.module'
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(VersionHeaderMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL })
-    consumer.apply(FailedAuthRateLimitMiddleware).forRoutes({ path: '*', method: RequestMethod.ALL })
+    consumer.apply(FailedAuthRateLimitMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL })
     consumer.apply(MaintenanceMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL })
   }
 }

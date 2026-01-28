@@ -36,25 +36,19 @@ export interface Runner {
    * @type {string}
    * @memberof Runner
    */
-  domain: string
+  domain?: string
   /**
    * The API URL of the runner
    * @type {string}
    * @memberof Runner
    */
-  apiUrl: string
+  apiUrl?: string
   /**
    * The proxy URL of the runner
    * @type {string}
    * @memberof Runner
    */
-  proxyUrl: string
-  /**
-   * The API key for the runner
-   * @type {string}
-   * @memberof Runner
-   */
-  apiKey: string
+  proxyUrl?: string
   /**
    * The CPU capacity of the runner
    * @type {number}
@@ -78,13 +72,13 @@ export interface Runner {
    * @type {number}
    * @memberof Runner
    */
-  gpu: number
+  gpu?: number
   /**
    * The type of GPU
    * @type {string}
    * @memberof Runner
    */
-  gpuType: string
+  gpuType?: string
   /**
    * The class of the runner
    * @type {SandboxClass}
@@ -134,6 +128,12 @@ export interface Runner {
    */
   currentSnapshotCount?: number
   /**
+   * Current number of started sandboxes
+   * @type {number}
+   * @memberof Runner
+   */
+  currentStartedSandboxes?: number
+  /**
    * Runner availability score
    * @type {number}
    * @memberof Runner
@@ -145,6 +145,12 @@ export interface Runner {
    * @memberof Runner
    */
   region: string
+  /**
+   * The name of the runner
+   * @type {string}
+   * @memberof Runner
+   */
+  name: string
   /**
    * The state of the runner
    * @type {RunnerState}
@@ -176,9 +182,24 @@ export interface Runner {
    */
   updatedAt: string
   /**
-   * The version of the runner
+   * The version of the runner (deprecated in favor of apiVersion)
    * @type {string}
    * @memberof Runner
+   * @deprecated
    */
   version: string
+  /**
+   * The api version of the runner
+   * @type {string}
+   * @memberof Runner
+   * @deprecated
+   */
+  apiVersion: string
+  /**
+   * The app version of the runner
+   * @type {string}
+   * @memberof Runner
+   * @deprecated
+   */
+  appVersion?: string
 }
